@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>星之競技場 - 班級排位系統 (安全雙向版)</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+  </script>
+
+  <style>
+    body { background-color: #0f172a; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(96, 165, 250, 0.5); border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(96, 165, 250, 0.8); }
+
+    @media print {
+      body, html { background: #0f172a !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      .no-print { display: none !important; }
+      .print-bg-fix { background-color: #1e293b !important; border: 1px solid #475569 !important; color: white !important; }
+      .print-container { page-break-inside: avoid; margin-bottom: 20px; }
+      .qr-print-grid { display: grid !important; grid-template-cols: repeat(3, minmax(0, 1fr)) !important; gap: 1rem !important; background: #0f172a !important; }
+      * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+    }
+  </style>
+</head>
+<body class="text-slate-100 font-sans overflow-x-hidden">
+  
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect, useRef, useMemo } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { Crown, Zap, Shield, Star, Music, VolumeX, Save, User, Trophy, Flame, LayoutDashboard, Edit3, RotateCcw, Wand2, UserCircle, ImageIcon, X, Rocket, Lock, AlertCircle, CheckSquare, Archive, Target, TrendingUp, History, Download, Users, Swords, ArrowRightLeft, Gamepad2, Gift, BarChart, ThumbsUp, ThumbsDown, Upload, Dices, QrCode, Printer, RefreshCw, Key } from 'lucide-react';
+
+    // --- 工具：產生音效 ---
+    const playAddSfx = () => {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        osc.type = 'triangle'; 
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1600, ctx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.15, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.1);
+      } catch (e) {}
+    };
+
+    const playEquipSfx = (type) => {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        osc.connect(gainNode); gainNode.connect(ctx.destination);
+        if (type === 'electric' || type === 'y2k') {
+          osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, ctx.currentTime);
+          osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.2);
+          gainNode.gain.setValueAtTime(0.1, ctx.currentTime); osc.start(); osc.stop(ctx.currentTime + 0.2);
+        } else {
+          osc.type = 'triangle'; osc.frequency.setValueAtTime(400, ctx.currentTime);
+          gainNode.gain.setValueAtTime(0.1, ctx.currentTime); osc.start(); osc.stop(ctx.currentTime + 0.1);
+        }
+      } catch(e){}
+    };
+
+    const getAuraClass = (aura) => {
+      if (aura === 'vintage') return "sepia-[.4] contrast-125 brightness-90 saturate-50";
+      if (aura === 'y2k') return "saturate-200 contrast-125 hue-rotate-[30deg] drop-shadow-[2px_4px_6px_rgba(236,72,153,0.5)]";
+      if (aura === 'soft') return "brightness-[1.15] contrast-[0.85] saturate-[1.2] drop-shadow-[0_0_15px_rgba(255,255,255,0.6)]";
+      if (aura === 'electric') return "brightness-110 contrast-125 saturate-200 hue-rotate-[220deg]";
+      if (aura === 'fire') return "brightness-110 contrast-125 saturate-[250%] sepia hue-rotate-[-30deg]";
+      if (aura === 'shadow') return "grayscale contrast-[150%] brightness-75 drop-shadow-md";
+      if (aura === 'abyss') return "invert saturate-[150%] contrast-125 hue-rotate-180";
+      if (aura === 'cyber') return "brightness-125 contrast-150 saturate-[300%] hue-rotate-90";
+      return "";
+    };
+
+    const TITLE_CONDITIONS = [
+      { title: '【每週之星】', condition: '曾達成每週評比前三名', key: 'hasBeenTop3Weekly' },
+      { title: '【名人堂】', condition: '曾登錄歷史殿堂中', key: 'hasBeenHoF' },
+      { title: '【MVP】', condition: '曾經在大明星中', key: 'hasBeenS' },
+      { title: '【關鍵】', condition: '曾經在關鍵戰將中', key: 'hasBeenA' },
+      { title: '【職業】', condition: '曾經在職業選手中', key: 'hasBeenB' },
+      { title: '【賭神】', condition: '擲骰子贏過系統', key: 'hasWonDice' },
+      { title: '【努力家】', condition: '認真點數曾達 5 點', key: 'hasBeenHardworker' },
+      { title: '【守護天使】', condition: 'Keep點數曾達 5 點', key: 'hasBeenAngel' },
+    ];
+
+    function StarArenaApp() {
+      const [isStudentMode, setIsStudentMode] = useState(false);
+      const [studentConfig, setStudentConfig] = useState({ room: '', studentId: null, token: '' });
+      
+      const [firebaseConfigInput, setFirebaseConfigInput] = useState(() => localStorage.getItem('starArena_fbConfig') || '');
+      const [fbRoomId, setFbRoomId] = useState(() => localStorage.getItem('starArena_fbRoomId') || 'Arena_Class101');
+      const [adminPassword, setAdminPassword] = useState(() => localStorage.getItem('starArena_adminPassword') || 'star1234');
+      const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
+      const dbRef = useRef(null);
+
+      const [activeTab, setActiveTab] = useState('avatar'); 
+      const [selectedId, setSelectedId] = useState(1);
+      const [studyScore, setStudyScore] = useState(0);
+      const [keepScore, setKeepScore] = useState(0);
+      
+      const [isBatchMode, setIsBatchMode] = useState(false);
+      const [batchSelection, setBatchSelection] = useState([]);
+      const [batchStudyDelta, setBatchStudyDelta] = useState('');
+      const [batchKeepDelta, setBatchKeepDelta] = useState('');
+
+      const [weeklySelectedId, setWeeklySelectedId] = useState(1);
+      const [weeklyGoodScore, setWeeklyGoodScore] = useState(0);
+      const [weeklyBadScore, setWeeklyBadScore] = useState(0);
+      const [diceState, setDiceState] = useState(null);
+
+      const [avatarSelectedId, setAvatarSelectedId] = useState(1);
+      const [inputNickname, setInputNickname] = useState('');
+      const [avatarClassTag, setAvatarClassTag] = useState(''); 
+      const [isGenerating, setIsGenerating] = useState(false);
+
+      const [toastMsg, setToastMsg] = useState("");
+      const [showResetConfirm, setShowResetConfirm] = useState(false);
+      const [showSettleConfirm, setShowSettleConfirm] = useState(false); 
+      const [showQrWall, setShowQrWall] = useState(false); 
+      const [achievementQueue, setAchievementQueue] = useState([]); 
+
+      const showToast = (msg) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(""), 3000);
+      };
+
+      const generateInitialStudents = () => {
+        const list = [];
+        for (let i = 1; i <= 28; i++) {
+          if (i === 10) continue; 
+          list.push({ 
+            id: i, name: `${i}號`, nickname: '', prefixTitle: '', avatar: '', effect: '', aura: '', 
+            study: 0, keep: 0, weeklyGood: 0, weeklyBad: 0, dicePlayed: false, diceWon: false,
+            hasBeenTop3Weekly: false, hasBeenHoF: false, hasBeenS: false, hasBeenA: false, hasBeenB: false, hasWonDice: false,
+            diceWinCount: 0, hasBeenHardworker: false, hasBeenAngel: false
+          });
+        }
+        return list;
+      };
+
+      const [students, setStudents] = useState(generateInitialStudents());
+      const [historyData, setHistoryData] = useState([]);
+      const [matchData, setMatchData] = useState({ phase: 'idle', teams: [], turnIndex: 0 });
+
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const room = params.get('room');
+        const studentId = params.get('studentId');
+        const token = params.get('token');
+
+        if (room && studentId && token) {
+          setIsStudentMode(true);
+          setStudentConfig({ room, studentId: parseInt(studentId), token });
+          setFbRoomId(room);
+          setAvatarSelectedId(parseInt(studentId));
+        }
+
+        const localStudents = localStorage.getItem('starArena_students');
+        const localHistory = localStorage.getItem('starArena_history');
+        const localMatch = localStorage.getItem('starArena_match');
+        if (localStudents) setStudents(JSON.parse(localStudents));
+        if (localHistory) setHistoryData(JSON.parse(localHistory));
+        if (localMatch) setMatchData(JSON.parse(localMatch));
+      }, []);
+
+      useEffect(() => {
+        if (!firebaseConfigInput || !fbRoomId) return;
+        try {
+          const config = JSON.parse(firebaseConfigInput);
+          const app = !firebase.apps.length ? firebase.initializeApp(config) : firebase.app();
+          const database = firebase.database();
+          dbRef.current = database.ref(`star_arena_rooms/${fbRoomId}`);
+          
+          setIsFirebaseConnected(true);
+          showToast("⚡ Firebase 雲端加密通道同步成功！");
+
+          dbRef.current.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+              if (data.students) setStudents(data.students);
+              if (data.historyData) setHistoryData(data.historyData);
+              if (data.matchData) setMatchData(data.matchData);
+            }
+          });
+        } catch (e) {
+          setIsFirebaseConnected(false);
+        }
+        return () => { if (dbRef.current) dbRef.current.off(); };
+      }, [firebaseConfigInput, fbRoomId]);
+
+      const syncToFirebaseAndLocal = (newStudents, newHistory, newMatch) => {
+        setStudents(newStudents);
+        if (newHistory) setHistoryData(newHistory);
+        if (newMatch) setMatchData(newMatch);
+
+        localStorage.setItem('starArena_students', JSON.stringify(newStudents));
+        if (newHistory) localStorage.setItem('starArena_history', JSON.stringify(newHistory));
+        if (newMatch) localStorage.setItem('starArena_match', JSON.stringify(newMatch));
+
+        if (dbRef.current) {
+          dbRef.current.update({
+            students: newStudents,
+            historyData: newHistory || historyData,
+            matchData: newMatch || matchData
+          }).catch(() => {});
+        }
+      };
+
+      const calculateStudentToken = (room, id) => {
+        const raw = `${room}_Seat${id}_SecuredBy_${adminPassword}`;
+        let hash = 0;
+        for (let i = 0; i < raw.length; i++) {
+          hash = (hash << 5) - hash + raw.charCodeAt(i);
+          hash |= 0;
+        }
+        return `TK-${Math.abs(hash)}`;
+      };
+
+      const handleStudentSelfUpdate = (targetId, updatedFields) => {
+        const expectedToken = calculateStudentToken(fbRoomId, targetId);
+        if (studentConfig.token !== expectedToken) {
+          alert("❌ 安全鎖定：防竄改權限驗證失敗！");
+          return;
+        }
+        const allowedFields = ['nickname', 'prefixTitle', 'avatar', 'effect', 'aura'];
+        const sanitizedFields = {};
+        allowedFields.forEach(f => {
+          if (updatedFields[f] !== undefined) sanitizedFields[f] = updatedFields[f];
+        });
+
+        const updated = students.map(s => (s.id === targetId ? { ...s, ...sanitizedFields } : s));
+        syncToFirebaseAndLocal(updated, null, null);
+        playEquipSfx(sanitizedFields.aura || 'default');
+        showToast("✨ 個人化外觀已成功上傳同步！");
+      };
+
+      const activeStudents = useMemo(() => {
+        return students.map(s => {
+          const total = s.study + s.keep;
+          let tier = 'D';
+          if (total >= 14) tier = 'S';
+          else if (total >= 10) tier = 'A';
+          else if (total >= 6) tier = 'B';
+          else if (total >= 1) tier = 'C';
+          return { ...s, totalScore: total, tier };
+        });
+      }, [students]);
+
+      useEffect(() => {
+        const cur = students.find(s => s.id === selectedId);
+        if (cur) { setStudyScore(cur.study); setKeepScore(cur.keep); }
+      }, [selectedId, students]);
+
+      useEffect(() => {
+        const cur = students.find(s => s.id === avatarSelectedId);
+        if (cur) setInputNickname(cur.nickname || '');
+      }, [avatarSelectedId, students]);
+
+      useEffect(() => {
+        if (showQrWall) {
+          students.forEach(s => {
+            const container = document.getElementById(`qrcode-box-${s.id}`);
+            if (container) {
+              container.innerHTML = "";
+              const baseUrl = window.location.origin + window.location.pathname;
+              const token = calculateStudentToken(fbRoomId, s.id);
+              const loginUrl = `${baseUrl}?room=${fbRoomId}&studentId=${s.id}&token=${token}`;
+              new QRCode(container, { text: loginUrl, width: 100, height: 100, colorDark : "#ffffff", colorLight : "#1e293b", correctLevel : QRCode.CorrectLevel.H });
+            }
+          });
+        }
+      }, [showQrWall, students, fbRoomId, adminPassword]);
+
+      useEffect(() => {
+        if (achievementQueue.length > 0) {
+          const timer = setTimeout(() => setAchievementQueue(prev => prev.slice(1)), 4000);
+          return () => clearTimeout(timer);
+        }
+      }, [achievementQueue]);
+
+      const pushAchievement = (studentName, title) => {
+        setAchievementQueue(prev => [...prev, { id: Date.now() + Math.random(), studentName, title }]);
+      };
+
+      const handleSingleScoreUpdate = () => {
+        const updated = students.map(s => {
+          if (s.id === selectedId) {
+            const oldTotal = s.study + s.keep;
+            const newStudy = Math.max(0, studyScore);
+            const newKeep = Math.max(0, keepScore);
+            const newTotal = newStudy + newKeep;
+            let news = { ...s, study: newStudy, keep: newKeep };
+            if (newStudy >= 5 && !s.hasBeenHardworker) { news.hasBeenHardworker = true; pushAchievement(s.nickname||s.name, '【努力家】'); }
+            if (newKeep >= 5 && !s.hasBeenAngel) { news.hasBeenAngel = true; pushAchievement(s.nickname||s.name, '【守護天使】'); }
+            if (newTotal >= 14 && oldTotal < 14 && !s.hasBeenS) { news.hasBeenS = true; pushAchievement(s.nickname||s.name, '【MVP】'); }
+            return news;
+          }
+          return s;
+        });
+        syncToFirebaseAndLocal(updated, null, null);
+        playAddSfx();
+        showToast("分數更新成功！");
+      };
+
+      const handleRollDice = (targetId) => {
+        const sRoll1 = Math.floor(Math.random() * 6) + 1; const sRoll2 = Math.floor(Math.random() * 6) + 1;
+        const sysRoll1 = Math.floor(Math.random() * 6) + 1; const sysRoll2 = Math.floor(Math.random() * 6) + 1;
+        const won = (sRoll1 + sRoll2) > (sysRoll1 + sysRoll2);
+        const updated = students.map(s => {
+          if (s.id === targetId) {
+            let news = { ...s, dicePlayed: true, diceWon: won };
+            if (won && !s.hasWonDice) { news.hasWonDice = true; pushAchievement(s.nickname||s.name, '【賭神】'); }
+            return news;
+          }
+          return s;
+        });
+        setDiceState({ studentId: targetId, s1: sRoll1, s2: sRoll2, sys1: sysRoll1, sys2: sysRoll2, won });
+        syncToFirebaseAndLocal(updated, null, null);
+      };
+
+      const toggleBatchSelection = (id) => {
+        setBatchSelection(batchSelection.includes(id) ? batchSelection.filter(x => x !== id) : [...batchSelection, id]);
+      };
+
+      const handleBatchSubmit = () => {
+        if (batchSelection.length === 0) return;
+        const dStudy = parseInt(batchStudyDelta) || 0; const dKeep = parseInt(batchKeepDelta) || 0;
+        const updated = students.map(s => {
+          if (batchSelection.includes(s.id)) {
+            return { ...s, study: Math.max(0, s.study + dStudy), keep: Math.max(0, s.keep + dKeep) };
+          }
+          return s;
+        });
+        syncToFirebaseAndLocal(updated, null, null);
+        setBatchSelection([]); setBatchStudyDelta(''); setBatchKeepDelta('');
+        playAddSfx();
+      };
+
+      const triggerGenerateAvatar = async (targetId) => {
+        setIsGenerating(true);
+        try {
+          const kw = avatarClassTag ? `${avatarClassTag}, anime` : "cyberpunk anime avatar";
+          const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(kw)}?width=250&height=250&nologo=true&seed=${Math.floor(Math.random()*9999)}`;
+          const updated = students.map(s => (s.id === targetId ? { ...s, avatar: imageUrl } : s));
+          syncToFirebaseAndLocal(updated, null, null);
+        } catch(e){} finally { setIsGenerating(false); }
+      };
+
+      const handleGenerateTeams = () => {
+        let pool = [...activeStudents].sort((a, b) => b.totalScore - a.totalScore);
+        let t1 = [], t2 = [];
+        pool.forEach((st, idx) => {
+          if (idx % 2 === 0) t1.push({ id: st.id, name: st.nickname || st.name, score: st.totalScore });
+          else t2.push({ id: st.id, name: st.nickname || st.name, score: st.totalScore });
+        });
+        syncToFirebaseAndLocal(students, null, { phase: 'ready', teams: [ { name: '紅蓮隊', members: t1 }, { name: '蒼藍隊', members: t2 } ], turnIndex: 0 });
+      };
+
+      const handleResetScores = () => {
+        const updated = students.map(s => ({ ...s, study: 0, keep: 0, dicePlayed: false, diceWon: false }));
+        syncToFirebaseAndLocal(updated, null, null); setShowResetConfirm(false);
+      };
+
+      const handleSettleToHistory = () => {
+        const sorted = [...activeStudents].sort((a,b) => b.totalScore - a.totalScore);
+        const top3 = sorted.slice(0, 3).map(s => s.nickname || s.name);
+        const newHistory = [{ id: Date.now(), date: new Date().toLocaleDateString(), top3 }, ...historyData];
+        syncToFirebaseAndLocal(students, newHistory, null); setShowSettleConfirm(false);
+      };
+// --- 學生平板端獨立控制台 UI 渲染 ---
+      const renderStudentDashboard = () => {
+        const currentStudent = students.find(s => s.id === studentConfig.studentId);
+        if (!currentStudent) {
+          return (
+            <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+              <div className="bg-slate-800 p-6 rounded-xl border border-red-500 max-w-md w-full text-center">
+                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                <h2 className="text-xl font-bold text-white mb-2">找不到學生資料</h2>
+                <p className="text-slate-400">請確認 QR Code 的座號參數是否正確，或聯繫老師重新生成。</p>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="min-h-screen bg-slate-950 text-slate-100 p-4 pb-12">
+            <div className="max-w-md mx-auto bg-slate-900 border border-emerald-500/30 rounded-2xl p-4 shadow-xl mb-6">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                  <span className="text-sm font-mono text-emerald-400 tracking-wider">SECURE CONNECTION</span>
+                </div>
+                <div className="flex items-center gap-1 text-slate-400 text-xs bg-slate-950 px-2 py-1 rounded">
+                  <Lock className="w-3 h-3 text-emerald-400" />
+                  <span>防竄改安全鎖已啟動</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className={`w-16 h-16 rounded-xl overflow-hidden bg-slate-800 border-2 border-slate-700 ${getAuraClass(currentStudent.aura)}`}>
+                    {currentStudent.avatar ? (
+                      <img src={currentStudent.avatar} alt="avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-500"><User className="w-8 h-8" /></div>
+                    )}
+                  </div>
+                  {currentStudent.effect && (
+                    <div className="absolute -inset-1 border-2 border-cyan-400 rounded-xl animate-ping opacity-30 pointer-events-none"></div>
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-2">
+                    {currentStudent.prefixTitle && (
+                      <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 text-xs font-bold px-1.5 py-0.5 rounded shadow">
+                        {currentStudent.prefixTitle}
+                      </span>
+                    )}
+                    <h1 className="text-xl font-bold text-white">{currentStudent.nickname || currentStudent.name}</h1>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">座號：{currentStudent.id} 號 | 房間：{studentConfig.room}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+                <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                  <div className="text-xs text-slate-500">認真點數</div>
+                  <div className="text-lg font-bold text-blue-400 font-mono">{currentStudent.study} <span className="text-xs text-slate-500">★</span></div>
+                </div>
+                <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                  <div className="text-xs text-slate-500">Keep點數</div>
+                  <div className="text-lg font-bold text-emerald-400 font-mono">{currentStudent.keep} <span className="text-xs text-slate-500">★</span></div>
+                </div>
+                <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                  <div className="text-xs text-slate-500">當前積分</div>
+                  <div className="text-lg font-bold text-amber-400 font-mono">{currentStudent.study + currentStudent.keep} <span className="text-xs text-slate-500">pts</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="max-w-md mx-auto">
+              <div className="flex gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 mb-4">
+                <button onClick={() => setActiveTab('avatar')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'avatar' ? 'bg-slate-800 text-cyan-400 shadow' : 'text-slate-400 hover:text-white'}`}>外觀設定</button>
+                <button onClick={() => setActiveTab('titles')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'titles' ? 'bg-slate-800 text-cyan-400 shadow' : 'text-slate-400 hover:text-white'}`}>稱號解鎖</button>
+                <button onClick={() => setActiveTab('dice')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'dice' ? 'bg-slate-800 text-cyan-400 shadow' : 'text-slate-400 hover:text-white'}`}>命運投擲</button>
+              </div>
+
+              {activeTab === 'avatar' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4 shadow-xl">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">自訂角色暱稱</label>
+                    <div className="flex gap-2">
+                      <input type="text" maxLength={8} value={inputNickname} onChange={(e) => setInputNickname(e.target.value)} placeholder="請輸入新暱稱..." className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500" />
+                      <button onClick={() => handleStudentSelfUpdate(currentStudent.id, { nickname: inputNickname })} className="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold px-4 py-2 rounded-xl text-sm transition-all">更新</button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-2">解鎖個人專屬光環 (Aura)</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: '', label: '🚫 無光環特效' }, { id: 'fire', label: '🔥 烈焰圍繞' }, { id: 'y2k', label: '💖 粉紅霓虹' },
+                        { id: 'soft', label: '✨ 聖潔柔光' }, { id: 'electric', label: '⚡ 閃電超頻' }, { id: 'vintage', label: '🎞️ 復古濾鏡' }, { id: 'shadow', label: '👁️ 暗影潛影' }
+                      ].map(item => (
+                        <button key={item.id} onClick={() => handleStudentSelfUpdate(currentStudent.id, { aura: item.id })} className={`p-3 text-left rounded-xl border text-xs transition-all ${currentStudent.aura === item.id ? 'bg-cyan-950/40 border-cyan-500 text-cyan-300' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'}`}>{item.label}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-2">裝備動態粒子特效 (Effects)</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: '', label: '🚫 無動態粒子' }, { id: 'neon', label: '🪐 脈衝星軌' }, { id: 'gold', label: '🪙 黃金碎屑' }, { id: 'magic', label: '🔮 奧術魔法' }
+                      ].map(item => (
+                        <button key={item.id} onClick={() => handleStudentSelfUpdate(currentStudent.id, { effect: item.id })} className={`p-3 text-left rounded-xl border text-xs transition-all ${currentStudent.effect === item.id ? 'bg-cyan-950/40 border-cyan-500 text-cyan-300' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'}`}>{item.label}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-800 pt-4">
+                    <label className="block text-xs font-medium text-slate-400 mb-1">召喚 AI 戰鬥頭像變身</label>
+                    <div className="flex gap-2">
+                      <input type="text" placeholder="例如: mecha, cat ears, dragon warrior..." value={avatarClassTag} onChange={(e) => setAvatarClassTag(e.target.value)} className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500" />
+                      <button disabled={isGenerating} onClick={() => triggerGenerateAvatar(currentStudent.id)} className="bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 text-white font-medium px-3 py-2 rounded-xl text-sm transition-all flex items-center gap-1">
+                        <Wand2 className="w-4 h-4" /> {isGenerating ? "繪製中..." : "生成"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'titles' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+                  <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                    <Trophy className="w-3 h-3 text-amber-400" /> <span>依據課堂真實表現自動解鎖：</span>
+                  </div>
+                  {TITLE_CONDITIONS.map(item => {
+                    const isUnlocked = !!currentStudent[item.key];
+                    const isEquipped = currentStudent.prefixTitle === item.title;
+                    return (
+                      <div key={item.title} className={`flex items-center justify-between p-3 rounded-xl border text-sm transition-all ${isUnlocked ? 'bg-slate-950 border-slate-800' : 'bg-slate-950/40 border-slate-900 opacity-60'}`}>
+                        <div>
+                          <div className={`font-bold ${isUnlocked ? 'text-amber-400' : 'text-slate-500'}`}>{item.title}</div>
+                          <div className="text-xs text-slate-500 mt-0.5">解鎖條件：{item.condition}</div>
+                        </div>
+                        {isUnlocked ? (
+                          <button onClick={() => {
+                            const curTitle = currentStudent.prefixTitle === item.title ? '' : item.title;
+                            handleStudentSelfUpdate(currentStudent.id, { prefixTitle: curTitle });
+                          }} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isEquipped ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{isEquipped ? '裝備中' : '裝備'}</button>
+                        ) : (
+                          <div className="text-xs text-slate-600 flex items-center gap-1"><Lock className="w-3 h-3" /> 未解鎖</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {activeTab === 'dice' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center shadow-xl">
+                  <h3 className="text-sm font-bold text-slate-300 mb-2">向系統大魔王挑戰命運之骰</h3>
+                  <p className="text-xs text-slate-500 mb-4">每輪結算前可挑戰一次。點擊按鈕後，大螢幕將與平板同步開獎！</p>
+                  {currentStudent.dicePlayed ? (
+                    <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                      <div className="text-xs text-slate-400 mb-2">本輪挑戰結果</div>
+                      {diceState && diceState.studentId === currentStudent.id ? (
+                        <div className="space-y-3">
+                          <div className="flex justify-center gap-6 items-center">
+                            <div>
+                              <div className="text-xs text-blue-400 mb-1">你投出</div>
+                              <div className="text-2xl font-mono font-bold text-white bg-blue-950/60 border border-blue-900 px-3 py-1 rounded-lg">{diceState.s1 + diceState.s2}</div>
+                            </div>
+                            <div className="text-slate-600 font-bold">VS</div>
+                            <div>
+                              <div className="text-xs text-red-400 mb-1">魔王投出</div>
+                              <div className="text-2xl font-mono font-bold text-white bg-red-950/60 border border-red-900 px-3 py-1 rounded-lg">{diceState.sys1 + diceState.sys2}</div>
+                            </div>
+                          </div>
+                          <div className={`text-base font-bold ${diceState.won ? 'text-emerald-400 animate-bounce' : 'text-slate-500'}`}>{diceState.won ? "🎉 挑戰成功！" : "☠️ 挑戰失敗，下輪再試！"}</div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-slate-400">你已在本輪完成了擲骰，請查看大螢幕結果！</div>
+                      )}
+                    </div>
+                  ) : (
+                    <button onClick={() => handleRollDice(currentStudent.id)} className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition-all flex items-center gap-2 mx-auto">
+                      <Dices className="w-5 h-5 animate-spin" /> 啟動命運投擲
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {toastMsg && <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 border border-cyan-500 text-cyan-300 px-4 py-2.5 rounded-xl text-xs shadow-2xl font-medium animate-fade-in-up">{toastMsg}</div>}
+          </div>
+        );
+      };
+
+      // --- 大螢幕單個學生卡片元件元件 ---
+      const renderStudentCard = (st) => {
+        const isSelected = selectedId === st.id;
+        const isBatchSelected = batchSelection.includes(st.id);
+        const total = st.study + st.keep;
+
+        return (
+          <div 
+            key={st.id}
+            onClick={() => {
+              if (isBatchMode) { toggleBatchSelection(st.id); } 
+              else { setSelectedId(st.id); setWeeklySelectedId(st.id); setAvatarSelectedId(st.id); }
+            }}
+            className={`relative group rounded-xl p-3 border transition-all cursor-pointer select-none overflow-hidden
+              ${isBatchMode 
+                ? (isBatchSelected ? 'bg-slate-800 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700')
+                : (isSelected ? 'bg-slate-800 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)] scale-[1.02]' : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700')
+              }
+            `}
+          >
+            {st.effect === 'neon' && <div className="absolute -inset-1 border border-cyan-500/20 rounded-xl animate-pulse pointer-events-none"></div>}
+            {st.effect === 'gold' && <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-yellow-400 to-transparent animate-pulse"></div>}
+            {st.effect === 'magic' && <div className="absolute -inset-2 bg-purple-500/5 rounded-xl animate-ping pointer-events-none"></div>}
+
+            <div className="flex items-start gap-2.5">
+              <div className="relative flex-shrink-0">
+                <div className={`w-12 h-12 rounded-lg overflow-hidden bg-slate-800 border border-slate-700/80 transition-all ${getAuraClass(st.aura)}`}>
+                  {st.avatar ? ( <img src={st.avatar} alt="a" className="w-full h-full object-cover" /> ) : ( <div className="w-full h-full flex items-center justify-center text-slate-600"><User className="w-6 h-6" /></div> )}
+                </div>
+                <div className="absolute -bottom-1 -right-1 bg-slate-950 text-slate-400 border border-slate-800 text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-mono font-bold">{st.id}</div>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1 flex-wrap">
+                  {st.prefixTitle && <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 text-[9px] font-black px-1 py-0.2 rounded shadow-sm scale-90 origin-left">{st.prefixTitle}</span>}
+                  <span className="font-bold text-white text-sm truncate">{st.nickname || st.name}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <div className="flex items-center gap-0.5 text-blue-400 font-mono text-xs font-bold"><span>{st.study}</span><span className="text-[10px] text-slate-600">★</span></div>
+                  <div className="text-slate-700 text-xs">|</div>
+                  <div className="flex items-center gap-0.5 text-emerald-400 font-mono text-xs font-bold"><span>{st.keep}</span><span className="text-[10px] text-slate-600">★</span></div>
+                  <div className="text-slate-700 text-xs">|</div>
+                  <div className="text-amber-400 font-mono text-xs font-black bg-amber-950/40 border border-amber-900/30 px-1 rounded">{total}<span className="text-[9px] font-normal text-amber-600 ml-0.5">p</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // --- 大螢幕階級區塊元件 ---
+      const renderTierSection = (title, icon, reqScore, tierTag, style) => {
+        const list = activeStudents.filter(s => s.tier === tierTag);
+        return (
+          <div className="mb-6" key={tierTag}>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{icon}</span>
+                <h3 className={`text-base font-black tracking-wider ${style.textColor}`}>{title}</h3>
+                <span className="text-xs text-slate-500 font-mono">({list.length}人)</span>
+              </div>
+              <div className="text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded-full border border-slate-800/60">晉級標準 ≥ {reqScore} 分</div>
+            </div>
+            {list.length === 0 ? (
+              <div className="text-center py-6 border border-dashed border-slate-900 rounded-xl text-xs text-slate-600 font-mono">NO CHAMPIONS IN THIS TIER YET</div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                {list.map(s => renderStudentCard(s))}
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      if (isStudentMode) { return renderStudentDashboard(); }
+
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
+          {achievementQueue.length > 0 && (
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-amber-600 via-orange-500 to-yellow-500 p-0.5 rounded-2xl shadow-[0_0_30px_rgba(245,158,11,0.5)] animate-bounce w-96">
+              <div className="bg-slate-950 p-4 rounded-2xl text-center">
+                <Trophy className="w-8 h-8 text-yellow-400 mx-auto mb-1 animate-spin" />
+                <div className="text-xs font-mono text-amber-400 uppercase tracking-widest font-bold">ACHIEVEMENT UNLOCKED</div>
+                <div className="text-lg font-black text-white mt-1">{achievementQueue[0].studentName}</div>
+                <div className="text-sm font-bold text-yellow-300 mt-0.5">成功解鎖榮譽稱號 {achievementQueue[0].title}</div>
+              </div>
+            </div>
+          )}
+
+          <header className="no-print bg-slate-900/90 border-b border-slate-800 px-6 py-3 flex items-center justify-between backdrop-blur-md z-30 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-lg shadow-orange-950/40"><Crown className="w-5 h-5 text-slate-950 font-black" /></div>
+              <div>
+                <h1 className="text-lg font-black tracking-wider bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">星之競技場 <span className="text-xs text-cyan-400 font-mono px-1.5 py-0.5 bg-slate-950 border border-slate-800 rounded ml-1">v4.0 安全雙向版</span></h1>
+                <p className="text-[10px] text-slate-500 mt-0.5">跨平台互動課堂排位與防竄改安全控制中心</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${isFirebaseConnected ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400' : 'bg-red-950/40 border-red-500/30 text-red-400'}`}>
+                <div className={`w-2 h-2 rounded-full ${isFirebaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}></div>
+                <span>{isFirebaseConnected ? "雲端同步通道運作中" : "未連接 Firebase"}</span>
+              </div>
+              <button onClick={() => setShowQrWall(true)} className="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all"><QrCode className="w-4 h-4" /> 平板連線 QR 卡</button>
+            </div>
+          </header>
+
+          <div className="no-print flex-1 flex overflow-hidden">
+            <main className="flex-1 p-6 overflow-y-auto custom-scrollbar space-y-6">
+              {renderTierSection('大明星 (Tier S)', '🎵🎤', 14, 'S', { textColor: 'text-yellow-400' })}
+              {renderTierSection('關鍵戰將 (Tier A)', '🏀⛹️‍♂️', 10, 'A', { textColor: 'text-cyan-400' })}
+              {renderTierSection('職業選手 (Tier B)', '⚔️✨', 6, 'B', { textColor: 'text-emerald-400' })}
+              {renderTierSection('業餘玩家 (Tier C)', '🎮👾', 1, 'C', { textColor: 'text-slate-300' })}
+              {renderTierSection('初學新手 (Tier D)', '🐣💤', 0, 'D', { textColor: 'text-slate-500' })}
+            </main>
+
+            <aside className="w-80 bg-slate-900/50 border-l border-slate-800/80 p-4 overflow-y-auto custom-scrollbar flex flex-col gap-4 shrink-0">
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                <div className="text-xs font-bold text-slate-400 flex items-center gap-1"><Key className="w-3 h-3 text-cyan-400" /> 系統同步與金鑰密碼</div>
+                <input type="password" placeholder="請貼上 Firebase Config JSON..." value={firebaseConfigInput} onChange={(e) => { setFirebaseConfigInput(e.target.value); localStorage.setItem('starArena_fbConfig', e.target.value); }} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-[10px] text-slate-300 font-mono focus:outline-none" />
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="text" placeholder="房間代碼" value={fbRoomId} onChange={(e) => { setFbRoomId(e.target.value); localStorage.setItem('starArena_fbRoomId', e.target.value); }} className="bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-white font-mono" />
+                  <input type="password" placeholder="安全密碼" value={adminPassword} onChange={(e) => { setAdminPassword(e.target.value); localStorage.setItem('starArena_adminPassword', e.target.value); }} className="bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-white font-mono" />
+                </div>
+              </div>
+
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <h4 className="text-xs font-bold text-cyan-400 tracking-wider">點數調整中控台</h4>
+                  <label className="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer">
+                    <input type="checkbox" checked={isBatchMode} onChange={(e) => { setIsBatchMode(e.target.checked); setBatchSelection([]); }} className="rounded border-slate-800 bg-slate-900 text-cyan-500 focus:ring-0 w-3 h-3" />
+                    <span>開啟多選批次模式</span>
+                  </label>
+                </div>
+
+                {isBatchMode ? (
+                  <div className="space-y-3">
+                    <div className="text-[11px] text-slate-500 bg-slate-900/60 p-2 rounded border border-slate-800/40">💡 請直接在大螢幕點擊卡片，已選中 <span className="text-cyan-400 font-bold">{batchSelection.length}</span> 人</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="number" placeholder="認真加減值" value={batchStudyDelta} onChange={(e)=>setBatchStudyDelta(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white" />
+                      <input type="number" placeholder="Keep加減值" value={batchKeepDelta} onChange={(e)=>setBatchKeepDelta(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white" />
+                    </div>
+                    <button onClick={handleBatchSubmit} disabled={batchSelection.length === 0} className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-slate-950 font-bold py-2 rounded-xl text-xs transition-all">確 定 批 次 套 用</button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <select value={selectedId} onChange={(e) => setSelectedId(parseInt(e.target.value))} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white font-mono">
+                      {students.map(s => <option key={s.id} value={s.id}>{s.id}號 - {s.nickname || s.name}</option>)}
+                    </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">認真點數</label>
+                        <input type="number" value={studyScore} onChange={(e) => setStudyScore(parseInt(e.target.value)||0)} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-sm text-center text-blue-400 font-mono font-bold" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">Keep點數</label>
+                        <input type="number" value={keepScore} onChange={(e) => setKeepScore(parseInt(e.target.value)||0)} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-sm text-center text-emerald-400 font-mono font-bold" />
+                      </div>
+                    </div>
+                    <button onClick={handleSingleScoreUpdate} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl text-xs transition-all">修 改 單 人 點 數</button>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                <h4 className="text-xs font-bold text-purple-400 tracking-wider mb-2 border-b border-slate-800 pb-1">競技殿堂功能控制</h4>
+                <button onClick={handleGenerateTeams} className="w-full bg-gradient-to-r from-red-950 to-blue-950 border border-slate-800 text-slate-200 py-2 rounded-xl text-xs font-bold hover:border-slate-700 transition-all flex items-center justify-center gap-1.5"><Swords className="w-4 h-4 text-orange-400" /> 智能平衡紅藍戰隊</button>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <button onClick={() => setShowResetConfirm(true)} className="bg-slate-900 border border-slate-800 text-red-400 font-medium py-2 rounded-lg text-xs hover:bg-red-950/20 transition-all">重置平日分數</button>
+                  <button onClick={() => setShowSettleConfirm(true)} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-black py-2 rounded-lg text-xs shadow">登錄歷史殿堂</button>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          {showQrWall && (
+            <div className="fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4 overflow-y-auto custom-scrollbar">
+              <div className="bg-slate-900 border border-slate-800 w-full max-w-5xl rounded-2xl p-6 shadow-2xl relative flex flex-col max-h-[90vh]">
+                <button onClick={() => setShowQrWall(false)} className="no-print absolute top-4 right-4 text-slate-500 hover:text-white transition-all bg-slate-950 p-2 rounded-xl border border-slate-800"><X className="w-5 h-5" /></button>
+                <div className="no-print border-b border-slate-800 pb-4 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-black text-white flex items-center gap-2"><QrCode className="w-6 h-6 text-cyan-400" /> 學生平板連線 QR Code 控制配對牆</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">學生掃描對應的 QR Code 後即可用平板直接變更外觀、解鎖稱號與光環。</p>
+                  </div>
+                  <button onClick={() => window.print()} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-1.5 shrink-0"><Printer className="w-4 h-4" /> 批次列印全班 A4 配對卡</button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+                  <div className="qr-print-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-2 bg-slate-950 rounded-xl border border-slate-900">
+                    {students.map(st => (
+                      <div key={st.id} className="print-container print-bg-fix bg-slate-900 border border-slate-800/80 p-4 rounded-xl flex flex-col items-center text-center justify-between shadow">
+                        <div>
+                          <div className="text-xs font-mono font-black text-cyan-400 uppercase tracking-wider bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800">SEAT {st.id}</div>
+                          <h3 className="text-sm font-bold text-white mt-1.5 truncate max-w-[150px]">{st.nickname || st.name}</h3>
+                        </div>
+                        <div className="bg-slate-800 p-2 rounded-lg my-3 border border-slate-700 flex items-center justify-center">
+                          <div id={`qrcode-box-${st.id}`} className="p-1 bg-slate-800 rounded"></div>
+                        </div>
+                        <div className="text-[9px] text-slate-500 font-mono scale-90 tracking-tight">星之競技場 專屬控制密鑰</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showResetConfirm && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full text-center">
+                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+                <h3 className="text-lg font-black text-white">確定重置平日點數？</h3>
+                <p className="text-xs text-slate-400 mt-1">這將會清空所有學生的認真與Keep點數。此操作無法復原。</p>
+                <div className="grid grid-cols-2 gap-3 mt-5">
+                  <button onClick={() => setShowResetConfirm(false)} className="bg-slate-800 text-slate-300 py-2 rounded-xl text-xs font-bold">取消</button>
+                  <button onClick={handleResetScores} className="bg-red-600 text-white py-2 rounded-xl text-xs font-bold">確定重置</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showSettleConfirm && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full text-center">
+                <Trophy className="w-12 h-12 text-amber-400 mx-auto mb-3" />
+                <h3 className="text-lg font-black text-white">確認登錄歷史殿堂？</h3>
+                <p className="text-xs text-slate-400 mt-1">系統將擷取目前排位前三名的榮譽王者，永久登錄至戰報中。</p>
+                <div className="grid grid-cols-2 gap-3 mt-5">
+                  <button onClick={() => setShowSettleConfirm(false)} className="bg-slate-800 text-slate-300 py-2 rounded-xl text-xs font-bold">取消</button>
+                  <button onClick={handleSettleToHistory} className="bg-amber-500 text-slate-950 font-black py-2 rounded-xl text-xs">確認封王登錄</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {toastMsg && <div className="no-print fixed bottom-4 left-6 bg-slate-900 border border-cyan-500 text-cyan-300 px-4 py-2.5 rounded-xl text-xs shadow-2xl font-medium animate-fade-in-up z-50">{toastMsg}</div>}
+        </div>
+      );
+    }
+
+    const container = document.getElementById('root');
+    const root = createRoot(container);
+    root.render(<StarArenaApp />);
+  </script>
+</body>
+</html>
