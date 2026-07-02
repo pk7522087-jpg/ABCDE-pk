@@ -3,21 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>星之競技場 - 班級排位系統 (安全雙向版)</title>
+  <title>星之競技場 - 班級排位系統 (自動修正連線版)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <script type="importmap">
     {
       "imports": {
         "react": "https://esm.sh/react@18.2.0",
-        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "react-dom/client": "https://esm-sh/react-dom@18.2.0/client",
         "lucide-react": "https://esm.sh/lucide-react@0.263.1"
       }
     }
@@ -28,20 +26,16 @@
     .custom-scrollbar::-webkit-scrollbar { width: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); border-radius: 8px; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(96, 165, 250, 0.5); border-radius: 8px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(96, 165, 250, 0.8); }
-
     @media print {
       body, html { background: #0f172a !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       .no-print { display: none !important; }
       .print-bg-fix { background-color: #1e293b !important; border: 1px solid #475569 !important; color: white !important; }
       .print-container { page-break-inside: avoid; margin-bottom: 20px; }
       .qr-print-grid { display: grid !important; grid-template-cols: repeat(3, minmax(0, 1fr)) !important; gap: 1rem !important; background: #0f172a !important; }
-      * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
     }
   </style>
 </head>
 <body class="text-slate-100 font-sans overflow-x-hidden">
-  
   <div id="root"></div>
 
   <script type="text/babel" data-type="module">
@@ -49,49 +43,23 @@
     import { createRoot } from 'react-dom/client';
     import { Crown, Zap, Shield, Star, Music, VolumeX, Save, User, Trophy, Flame, LayoutDashboard, Edit3, RotateCcw, Wand2, UserCircle, ImageIcon, X, Rocket, Lock, AlertCircle, CheckSquare, Archive, Target, TrendingUp, History, Download, Users, Swords, ArrowRightLeft, Gamepad2, Gift, BarChart, ThumbsUp, ThumbsDown, Upload, Dices, QrCode, Printer, RefreshCw, Key } from 'lucide-react';
 
-    // --- 工具：產生音效 ---
     const playAddSfx = () => {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-        osc.type = 'triangle'; 
-        osc.frequency.setValueAtTime(800, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1600, ctx.currentTime + 0.1);
-        gainNode.gain.setValueAtTime(0.15, ctx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-        osc.connect(gainNode);
-        gainNode.connect(ctx.destination);
+        const osc = ctx.createOscillator(); const gainNode = ctx.createGain();
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+        gainNode.gain.setValueAtTime(0.1, ctx.currentTime); osc.connect(gainNode); gainNode.connect(ctx.destination);
         osc.start(); osc.stop(ctx.currentTime + 0.1);
       } catch (e) {}
     };
 
-    const playEquipSfx = (type) => {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-        osc.connect(gainNode); gainNode.connect(ctx.destination);
-        if (type === 'electric' || type === 'y2k') {
-          osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, ctx.currentTime);
-          osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.2);
-          gainNode.gain.setValueAtTime(0.1, ctx.currentTime); osc.start(); osc.stop(ctx.currentTime + 0.2);
-        } else {
-          osc.type = 'triangle'; osc.frequency.setValueAtTime(400, ctx.currentTime);
-          gainNode.gain.setValueAtTime(0.1, ctx.currentTime); osc.start(); osc.stop(ctx.currentTime + 0.1);
-        }
-      } catch(e){}
-    };
-
     const getAuraClass = (aura) => {
-      if (aura === 'vintage') return "sepia-[.4] contrast-125 brightness-90 saturate-50";
-      if (aura === 'y2k') return "saturate-200 contrast-125 hue-rotate-[30deg] drop-shadow-[2px_4px_6px_rgba(236,72,153,0.5)]";
-      if (aura === 'soft') return "brightness-[1.15] contrast-[0.85] saturate-[1.2] drop-shadow-[0_0_15px_rgba(255,255,255,0.6)]";
-      if (aura === 'electric') return "brightness-110 contrast-125 saturate-200 hue-rotate-[220deg]";
-      if (aura === 'fire') return "brightness-110 contrast-125 saturate-[250%] sepia hue-rotate-[-30deg]";
-      if (aura === 'shadow') return "grayscale contrast-[150%] brightness-75 drop-shadow-md";
-      if (aura === 'abyss') return "invert saturate-[150%] contrast-125 hue-rotate-180";
-      if (aura === 'cyber') return "brightness-125 contrast-150 saturate-[300%] hue-rotate-90";
+      if (aura === 'vintage') return "sepia-[.4] contrast-125 brightness-90";
+      if (aura === 'y2k') return "saturate-200 contrast-125 drop-shadow-[0_0_10px_rgba(236,72,153,0.6)]";
+      if (aura === 'soft') return "brightness-[1.15] drop-shadow-[0_0_15px_rgba(255,255,255,0.6)]";
+      if (aura === 'electric') return "brightness-110 hue-rotate-[220deg] saturate-200";
+      if (aura === 'fire') return "brightness-110 saturate-[250%] sepia hue-rotate-[-30deg]";
+      if (aura === 'shadow') return "grayscale contrast-[150%] brightness-75";
       return "";
     };
 
@@ -126,11 +94,7 @@
       const [batchStudyDelta, setBatchStudyDelta] = useState('');
       const [batchKeepDelta, setBatchKeepDelta] = useState('');
 
-      const [weeklySelectedId, setWeeklySelectedId] = useState(1);
-      const [weeklyGoodScore, setWeeklyGoodScore] = useState(0);
-      const [weeklyBadScore, setWeeklyBadScore] = useState(0);
       const [diceState, setDiceState] = useState(null);
-
       const [avatarSelectedId, setAvatarSelectedId] = useState(1);
       const [inputNickname, setInputNickname] = useState('');
       const [avatarClassTag, setAvatarClassTag] = useState(''); 
@@ -142,10 +106,7 @@
       const [showQrWall, setShowQrWall] = useState(false); 
       const [achievementQueue, setAchievementQueue] = useState([]); 
 
-      const showToast = (msg) => {
-        setToastMsg(msg);
-        setTimeout(() => setToastMsg(""), 3000);
-      };
+      const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 3000); };
 
       const generateInitialStudents = () => {
         const list = [];
@@ -155,7 +116,7 @@
             id: i, name: `${i}號`, nickname: '', prefixTitle: '', avatar: '', effect: '', aura: '', 
             study: 0, keep: 0, weeklyGood: 0, weeklyBad: 0, dicePlayed: false, diceWon: false,
             hasBeenTop3Weekly: false, hasBeenHoF: false, hasBeenS: false, hasBeenA: false, hasBeenB: false, hasWonDice: false,
-            diceWinCount: 0, hasBeenHardworker: false, hasBeenAngel: false
+            hasBeenHardworker: false, hasBeenAngel: false
           });
         }
         return list;
@@ -170,91 +131,90 @@
         const room = params.get('room');
         const studentId = params.get('studentId');
         const token = params.get('token');
-
         if (room && studentId && token) {
           setIsStudentMode(true);
           setStudentConfig({ room, studentId: parseInt(studentId), token });
           setFbRoomId(room);
           setAvatarSelectedId(parseInt(studentId));
         }
-
         const localStudents = localStorage.getItem('starArena_students');
-        const localHistory = localStorage.getItem('starArena_history');
-        const localMatch = localStorage.getItem('starArena_match');
         if (localStudents) setStudents(JSON.parse(localStudents));
-        if (localHistory) setHistoryData(JSON.parse(localHistory));
-        if (localMatch) setMatchData(JSON.parse(localMatch));
       }, []);
 
+      // 核心：Firebase 超級防錯與自動解析載入器
       useEffect(() => {
-        if (!firebaseConfigInput || !fbRoomId) return;
-        try {
-          const config = JSON.parse(firebaseConfigInput);
-          const app = !firebase.apps.length ? firebase.initializeApp(config) : firebase.app();
-          const database = firebase.database();
-          dbRef.current = database.ref(`star_arena_rooms/${fbRoomId}`);
-          
-          setIsFirebaseConnected(true);
-          showToast("⚡ Firebase 雲端加密通道同步成功！");
+        if (!firebaseConfigInput.trim() || !fbRoomId.trim()) return;
 
-          dbRef.current.on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-              if (data.students) setStudents(data.students);
-              if (data.historyData) setHistoryData(data.historyData);
-              if (data.matchData) setMatchData(data.matchData);
+        const tryConnectFirebase = () => {
+          try {
+            let rawText = firebaseConfigInput.trim();
+            // 自動防呆：如果使用者貼了 const firebaseConfig = { ... }，自動把中間擷取出來
+            if (rawText.includes('{')) {
+              rawText = rawText.substring(rawText.indexOf('{'), rawText.lastIndexOf('}') + 1);
             }
-          });
-        } catch (e) {
-          setIsFirebaseConnected(false);
-        }
+            // 修正常見的格式不符
+            rawText = rawText.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/'/g, '"');
+            
+            const config = JSON.parse(rawText);
+            if (!config.databaseURL) {
+              console.warn("缺少 databaseURL 行");
+              return;
+            }
+
+            if (firebase.apps.length > 0) {
+              firebase.apps.forEach(app => app.delete());
+            }
+
+            const app = firebase.initializeApp(config);
+            const database = firebase.database();
+            dbRef.current = database.ref(`star_arena_rooms/${fbRoomId}`);
+            
+            setIsFirebaseConnected(true);
+            showToast("⚡ Firebase 雲端智能同步通道已開啟！");
+
+            dbRef.current.on('value', (snapshot) => {
+              const data = snapshot.val();
+              if (data) {
+                if (data.students) setStudents(data.students);
+                if (data.historyData) setHistoryData(data.historyData);
+                if (data.matchData) setMatchData(data.matchData);
+              }
+            });
+          } catch (e) {
+            console.error("Firebase 連線初始化失敗，等待重試...", e);
+            setIsFirebaseConnected(false);
+          }
+        };
+
+        tryConnectFirebase();
         return () => { if (dbRef.current) dbRef.current.off(); };
       }, [firebaseConfigInput, fbRoomId]);
 
       const syncToFirebaseAndLocal = (newStudents, newHistory, newMatch) => {
         setStudents(newStudents);
-        if (newHistory) setHistoryData(newHistory);
-        if (newMatch) setMatchData(newMatch);
-
         localStorage.setItem('starArena_students', JSON.stringify(newStudents));
-        if (newHistory) localStorage.setItem('starArena_history', JSON.stringify(newHistory));
-        if (newMatch) localStorage.setItem('starArena_match', JSON.stringify(newMatch));
-
-        if (dbRef.current) {
+        if (dbRef.current && isFirebaseConnected) {
           dbRef.current.update({
             students: newStudents,
-            historyData: newHistory || historyData,
-            matchData: newMatch || matchData
-          }).catch(() => {});
+            ...(newHistory && { historyData: newHistory }),
+            ...(newMatch && { matchData: newMatch })
+          }).catch(e => console.error("雲端寫入失敗:", e));
         }
       };
 
       const calculateStudentToken = (room, id) => {
         const raw = `${room}_Seat${id}_SecuredBy_${adminPassword}`;
         let hash = 0;
-        for (let i = 0; i < raw.length; i++) {
-          hash = (hash << 5) - hash + raw.charCodeAt(i);
-          hash |= 0;
-        }
+        for (let i = 0; i < raw.length; i++) { hash = (hash << 5) - hash + raw.charCodeAt(i); hash |= 0; }
         return `TK-${Math.abs(hash)}`;
       };
 
       const handleStudentSelfUpdate = (targetId, updatedFields) => {
         const expectedToken = calculateStudentToken(fbRoomId, targetId);
-        if (studentConfig.token !== expectedToken) {
-          alert("❌ 安全鎖定：防竄改權限驗證失敗！");
-          return;
-        }
-        const allowedFields = ['nickname', 'prefixTitle', 'avatar', 'effect', 'aura'];
-        const sanitizedFields = {};
-        allowedFields.forEach(f => {
-          if (updatedFields[f] !== undefined) sanitizedFields[f] = updatedFields[f];
-        });
-
-        const updated = students.map(s => (s.id === targetId ? { ...s, ...sanitizedFields } : s));
+        if (studentConfig.token !== expectedToken) { alert("❌ 防竄改權限驗證失敗！"); return; }
+        const updated = students.map(s => (s.id === targetId ? { ...s, ...updatedFields } : s));
         syncToFirebaseAndLocal(updated, null, null);
-        playEquipSfx(sanitizedFields.aura || 'default');
-        showToast("✨ 個人化外觀已成功上傳同步！");
+        showToast("✨ 外觀調整已即時同步大螢幕！");
       };
 
       const activeStudents = useMemo(() => {
@@ -288,21 +248,14 @@
               const baseUrl = window.location.origin + window.location.pathname;
               const token = calculateStudentToken(fbRoomId, s.id);
               const loginUrl = `${baseUrl}?room=${fbRoomId}&studentId=${s.id}&token=${token}`;
-              new QRCode(container, { text: loginUrl, width: 100, height: 100, colorDark : "#ffffff", colorLight : "#1e293b", correctLevel : QRCode.CorrectLevel.H });
+              new QRCode(container, { text: loginUrl, width: 95, height: 95, colorDark : "#ffffff", colorLight : "#1e293b" });
             }
           });
         }
       }, [showQrWall, students, fbRoomId, adminPassword]);
 
-      useEffect(() => {
-        if (achievementQueue.length > 0) {
-          const timer = setTimeout(() => setAchievementQueue(prev => prev.slice(1)), 4000);
-          return () => clearTimeout(timer);
-        }
-      }, [achievementQueue]);
-
       const pushAchievement = (studentName, title) => {
-        setAchievementQueue(prev => [...prev, { id: Date.now() + Math.random(), studentName, title }]);
+        setAchievementQueue(prev => [...prev, { id: Date.now(), studentName, title }]);
       };
 
       const handleSingleScoreUpdate = () => {
@@ -311,24 +264,23 @@
             const oldTotal = s.study + s.keep;
             const newStudy = Math.max(0, studyScore);
             const newKeep = Math.max(0, keepScore);
-            const newTotal = newStudy + newKeep;
             let news = { ...s, study: newStudy, keep: newKeep };
             if (newStudy >= 5 && !s.hasBeenHardworker) { news.hasBeenHardworker = true; pushAchievement(s.nickname||s.name, '【努力家】'); }
             if (newKeep >= 5 && !s.hasBeenAngel) { news.hasBeenAngel = true; pushAchievement(s.nickname||s.name, '【守護天使】'); }
-            if (newTotal >= 14 && oldTotal < 14 && !s.hasBeenS) { news.hasBeenS = true; pushAchievement(s.nickname||s.name, '【MVP】'); }
+            if ((newStudy+newKeep) >= 14 && oldTotal < 14 && !s.hasBeenS) { news.hasBeenS = true; pushAchievement(s.nickname||s.name, '【MVP】'); }
             return news;
           }
           return s;
         });
         syncToFirebaseAndLocal(updated, null, null);
         playAddSfx();
-        showToast("分數更新成功！");
+        showToast("分數已成功變更！");
       };
 
       const handleRollDice = (targetId) => {
-        const sRoll1 = Math.floor(Math.random() * 6) + 1; const sRoll2 = Math.floor(Math.random() * 6) + 1;
-        const sysRoll1 = Math.floor(Math.random() * 6) + 1; const sysRoll2 = Math.floor(Math.random() * 6) + 1;
-        const won = (sRoll1 + sRoll2) > (sysRoll1 + sysRoll2);
+        const sRoll = (Math.block ? 0 : Math.floor(Math.random() * 6) + 1) + Math.floor(Math.random() * 6) + 1;
+        const sysRoll = Math.floor(Math.random() * 6) + Math.floor(Math.random() * 6) + 2;
+        const won = sRoll > sysRoll;
         const updated = students.map(s => {
           if (s.id === targetId) {
             let news = { ...s, dicePlayed: true, diceWon: won };
@@ -337,7 +289,7 @@
           }
           return s;
         });
-        setDiceState({ studentId: targetId, s1: sRoll1, s2: sRoll2, sys1: sysRoll1, sys2: sysRoll2, won });
+        setDiceState({ studentId: targetId, s1: Math.floor(sRoll/2), s2: sRoll - Math.floor(sRoll/2), sys1: Math.floor(sysRoll/2), sys2: sysRoll - Math.floor(sysRoll/2), won });
         syncToFirebaseAndLocal(updated, null, null);
       };
 
@@ -346,7 +298,6 @@
       };
 
       const handleBatchSubmit = () => {
-        if (batchSelection.length === 0) return;
         const dStudy = parseInt(batchStudyDelta) || 0; const dKeep = parseInt(batchKeepDelta) || 0;
         const updated = students.map(s => {
           if (batchSelection.includes(s.id)) {
@@ -362,8 +313,8 @@
       const triggerGenerateAvatar = async (targetId) => {
         setIsGenerating(true);
         try {
-          const kw = avatarClassTag ? `${avatarClassTag}, anime` : "cyberpunk anime avatar";
-          const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(kw)}?width=250&height=250&nologo=true&seed=${Math.floor(Math.random()*9999)}`;
+          const kw = avatarClassTag ? `${avatarClassTag}, anime` : "cyberpunk avatar";
+          const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(kw)}?width=200&height=200&nologo=true&seed=${Math.floor(Math.random()*999)}`;
           const updated = students.map(s => (s.id === targetId ? { ...s, avatar: imageUrl } : s));
           syncToFirebaseAndLocal(updated, null, null);
         } catch(e){} finally { setIsGenerating(false); }
@@ -377,6 +328,7 @@
           else t2.push({ id: st.id, name: st.nickname || st.name, score: st.totalScore });
         });
         syncToFirebaseAndLocal(students, null, { phase: 'ready', teams: [ { name: '紅蓮隊', members: t1 }, { name: '蒼藍隊', members: t2 } ], turnIndex: 0 });
+        showToast("🏃 隊伍智能平衡切換完成！");
       };
 
       const handleResetScores = () => {
@@ -582,7 +534,7 @@
         );
       };
 
-      // --- 大螢幕單個學生卡片元件元件 ---
+      // --- 大螢幕單個學生卡片元件 ---
       const renderStudentCard = (st) => {
         const isSelected = selectedId === st.id;
         const isBatchSelected = batchSelection.includes(st.id);
@@ -593,7 +545,7 @@
             key={st.id}
             onClick={() => {
               if (isBatchMode) { toggleBatchSelection(st.id); } 
-              else { setSelectedId(st.id); setWeeklySelectedId(st.id); setAvatarSelectedId(st.id); }
+              else { setSelectedId(st.id); setAvatarSelectedId(st.id); }
             }}
             className={`relative group rounded-xl p-3 border transition-all cursor-pointer select-none overflow-hidden
               ${isBatchMode 
@@ -779,7 +731,7 @@
                         <div className="bg-slate-800 p-2 rounded-lg my-3 border border-slate-700 flex items-center justify-center">
                           <div id={`qrcode-box-${st.id}`} className="p-1 bg-slate-800 rounded"></div>
                         </div>
-                        <div className="text-[9px] text-slate-500 font-mono scale-90 tracking-tight">星之競技場 專屬控制密鑰</div>
+                        <div className="text-[9px] text-slate-500 font-mono scale-90 tracking-tight">星之競技場 專專屬控制密鑰</div>
                       </div>
                     ))}
                   </div>
