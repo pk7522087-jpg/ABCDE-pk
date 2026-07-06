@@ -1,776 +1,1506 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>星之競技場 - 班級排位系統 (斷網防封鎖優化版)</title>
-  
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>班級領土爭霸戰 - 心理學優化旗艦版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #0f172a;
+            color: #e5e7eb;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(236, 72, 153, 0.15), transparent 25%),
+                linear-gradient(to bottom, #0f172a, #020617);
+            transition: all 0.5s ease-in-out;
+        }
 
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
 
-  <style>
-    body { background-color: #0f172a; }
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); border-radius: 8px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(96, 165, 250, 0.5); border-radius: 8px; }
-    @media print {
-      body, html { background: #0f172a !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      .no-print { display: none !important; }
-      .print-bg-fix { background-color: #1e293b !important; border: 1px solid #475569 !important; color: white !important; }
-      .print-container { page-break-inside: avoid; margin-bottom: 20px; }
-      .qr-print-grid { display: grid !important; grid-template-cols: repeat(3, minmax(0, 1fr)) !important; gap: 1rem !important; background: #0f172a !important; }
-    }
-  </style>
+        .btn-3d {
+            position: relative;
+            transition: all 0.1s;
+            box-shadow: 0 6px 0px rgba(0, 0, 0, 0.4), 0 10px 15px rgba(0,0,0,0.4);
+        }
+        .btn-3d:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0px rgba(0, 0, 0, 0.4), 0 5px 5px rgba(0,0,0,0.4);
+        }
+        
+        .bar-transition { 
+            transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1); 
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Racing Stripe overlay for progress bars */
+        .racing-stripe {
+            background-image: linear-gradient(45deg, rgba(255,255,255,.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, transparent 75%, transparent);
+            background-size: 1rem 1rem;
+        }
+
+        .floating-icon { animation: floating 3s ease-in-out infinite; }
+        @keyframes floating {
+            0%, 100% { transform: translateY(0px) drop-shadow(0 4px 6px rgba(0,0,0,0.5)); }
+            50% { transform: translateY(-6px) drop-shadow(0 10px 10px rgba(0,0,0,0.6)); }
+        }
+
+        .modal-jelly { animation: jellyPopup 0.5s cubic-bezier(0.68, -0.55, 0.26, 1.55) forwards; }
+        @keyframes jellyPopup {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        /* === Hexagon Grid CSS 3D 視覺升級 === */
+        .hex-grid-container {
+            display: flex; flex-direction: column; align-items: center; padding: 20px 0 80px 0; 
+            transform-origin: center center; width: 100%; height: 100%; justify-content: center;
+        }
+        .hex-row { display: flex; justify-content: center; margin-bottom: -12px; }
+        .hex {
+            width: 40px; height: 46px; background-color: #1e293b;
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            margin: 0 1px; cursor: pointer; position: relative; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            /* 加入實體厚度陰影 */
+            filter: drop-shadow(0px 5px 2px rgba(0,0,0,0.6));
+        }
+        .hex-row.odd-row { margin-left: 21px; }
+
+        @media (min-width: 640px) { .hex { width: 50px; height: 58px; margin: 0 2px; } .hex-row { margin-bottom: -14px; } .hex-row.odd-row { margin-left: 27px; } }
+        @media (min-width: 768px) { .hex { width: 60px; height: 69px; margin: 0 2px; } .hex-row { margin-bottom: -17px; } .hex-row.odd-row { margin-left: 32px; } }
+        @media (min-width: 1024px) { .hex { width: 65px; height: 75px; margin: 0 2px; } .hex-row { margin-bottom: -18px; } .hex-row.odd-row { margin-left: 34px; } }
+        @media (min-width: 1280px) { .hex { width: 75px; height: 86px; margin: 0 3px; } .hex-row { margin-bottom: -21px; } .hex-row.odd-row { margin-left: 40px; } }
+        @media (min-width: 1536px) { .hex { width: 85px; height: 98px; margin: 0 3px; } .hex-row { margin-bottom: -24px; } .hex-row.odd-row { margin-left: 45px; } }
+
+        .hex::before {
+            content: ''; position: absolute; top: 2px; left: 2px; right: 2px; bottom: 2px;
+            background-color: inherit; clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            /* 高光立體邊緣材質疊加 */
+            background-image: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.5) 100%);
+            z-index: 1;
+        }
+        .hex-inner { text-align: center; z-index: 5; font-size: 1.2rem; }
+        
+        .hex:hover { 
+            transform: scale(1.15) translateY(-6px); z-index: 20; 
+            filter: drop-shadow(0px 10px 5px rgba(0,0,0,0.8)) brightness(1.3); 
+        }
+        
+        .hex.valid-target::after {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255, 255, 255, 0.8);
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); z-index: 3;
+            animation: neonPulse 1.2s infinite alternate; pointer-events: none; mix-blend-mode: overlay;
+        }
+        @keyframes neonPulse { 0% { opacity: 0.1; box-shadow: inset 0 0 10px #fff; } 100% { opacity: 0.9; box-shadow: inset 0 0 20px #fff; } }
+
+        /* === 佔領粒子光爆動畫 === */
+        .hex-capture-effect {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 100%; height: 100%; border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,255,255,0.9) 0%, transparent 60%);
+            animation: captureBlast 0.6s ease-out forwards;
+            pointer-events: none; z-index: 15;
+        }
+        @keyframes captureBlast {
+            0% { transform: translate(-50%, -50%) scale(0.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+        }
+
+        .text-gradient-animate { background-size: 200% auto; animation: textShine 3s linear infinite; }
+        @keyframes textShine { to { background-position: 200% center; } }
+        
+        #modal-overlay, #mystery-choice-overlay, #manual-ap-overlay { background-color: rgba(0,0,0,0.85); backdrop-filter: blur(8px); }
+
+        /* === 展演模式 CSS === */
+        body.presentation-active header { display: none !important; }
+        body.presentation-active .control-panel { display: none !important; }
+        body.presentation-active .display-panel { 
+            width: 100% !important; max-width: 100% !important; grid-column: span 12 !important; 
+            min-height: 85vh; margin: 0 auto;
+        }
+        .badge-pulse { animation: badgePulse 2s infinite; }
+        @keyframes badgePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); filter: brightness(1.2); } }
+    </style>
 </head>
-<body class="text-slate-100 font-sans overflow-x-hidden">
-  <div id="root"></div>
+<body class="p-2 md:p-6 min-h-screen flex flex-col items-center">
 
-  <script type="text/babel">
-    // 直接從全域視窗物件抓取 React，徹底繞過 esm.sh 的網路限制
-    const { useState, useEffect, useRef, useMemo } = React;
+    <!-- 浮動按鈕區 (左右配置防呆防誤觸) -->
+    <div class="fixed top-4 left-4 md:top-6 md:left-6 z-40 flex flex-col gap-4">
+        <button onclick="undoAction()" class="btn-3d w-12 h-12 md:w-14 md:h-14 rounded-full bg-gradient-to-b from-fuchsia-600 to-fuchsia-800 text-white font-black border-2 border-fuchsia-400 flex items-center justify-center text-xl shadow-2xl transition hover:scale-110" title="復原上一步">
+            <i class="fa-solid fa-rotate-left"></i>
+        </button>
+    </div>
 
-    // 建立一個簡易的 SVG 圖標代理，避免 Lucide-react 套件下載失敗導致整個網頁當機
-    const IconProxy = ({ name, className = "w-4 h-4" }) => {
-      return (
-        <span className={`inline-block border border-dashed border-slate-700 rounded px-1 text-[10px] uppercase font-mono tracking-tighter ${className}`}>
-          {name.substring(0,3)}
-        </span>
-      );
-    };
+    <div class="fixed top-4 right-4 md:top-6 md:right-6 z-40 flex flex-col gap-4">
+        <button id="bgm-toggle" onclick="toggleBGM()" class="btn-3d w-12 h-12 md:w-14 md:h-14 rounded-full bg-gradient-to-b from-gray-700 to-gray-900 text-white font-black border-2 border-gray-500 flex items-center justify-center text-xl shadow-2xl transition hover:scale-110" title="音樂開關">
+            <i class="fa-solid fa-volume-xmark" id="bgm-icon"></i>
+        </button>
+        <button id="pres-toggle" onclick="togglePresentation()" class="btn-3d w-12 h-12 md:w-14 md:h-14 rounded-full bg-gradient-to-b from-indigo-600 to-indigo-800 text-white font-black border-2 border-indigo-400 flex items-center justify-center text-xl shadow-2xl transition hover:scale-110" title="全螢幕展演模式">
+            <i class="fa-solid fa-expand" id="pres-icon"></i>
+        </button>
+    </div>
 
-    const playAddSfx = () => {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator(); const gainNode = ctx.createGain();
-        osc.type = 'triangle'; osc.frequency.setValueAtTime(800, ctx.currentTime);
-        gainNode.gain.setValueAtTime(0.1, ctx.currentTime); osc.connect(gainNode); gainNode.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + 0.1);
-      } catch (e) {}
-    };
+    <header class="text-center mb-6 w-full max-w-7xl relative px-14">
+        <h1 class="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-red-500 text-gradient-animate drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] tracking-wide mb-4">
+            <i class="fa-solid fa-khanda mr-3 text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]"></i>班級領土爭霸戰
+        </h1>
+        
+        <!-- 核心導覽列 -->
+        <div class="flex justify-center space-x-2 md:space-x-4 flex-wrap gap-y-3">
+            <button onclick="switchTab('calc')" id="tab-calc" class="btn-3d px-5 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-b from-blue-500 to-blue-700 text-white font-black border-2 border-blue-400 transition-all text-sm md:text-lg shadow-lg">
+                <i class="fa-solid fa-chart-pie mr-2"></i>戰力結算
+            </button>
+            <button onclick="switchTab('map')" id="tab-map" class="btn-3d px-5 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-b from-gray-600 to-gray-800 text-gray-300 font-black border-2 border-gray-500 transition-all text-sm md:text-lg shadow-lg">
+                <i class="fa-solid fa-globe mr-2"></i>世界地圖
+            </button>
+            <button onclick="switchTab('honor')" id="tab-honor" class="btn-3d px-5 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-b from-gray-600 to-gray-800 text-gray-300 font-black border-2 border-gray-500 transition-all text-sm md:text-lg shadow-lg">
+                <i class="fa-solid fa-trophy mr-2 text-yellow-400"></i>最高榮譽
+            </button>
+            <button onclick="switchTab('settings')" id="tab-settings" class="btn-3d px-5 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-b from-gray-600 to-gray-800 text-gray-300 font-black border-2 border-gray-500 transition-all text-sm md:text-lg shadow-lg">
+                <i class="fa-solid fa-gear mr-2 text-gray-400"></i>系統設定
+            </button>
+        </div>
+    </header>
 
-    const getAuraClass = (aura) => {
-      if (aura === 'vintage') return "sepia-[.4] contrast-125 brightness-90";
-      if (aura === 'y2k') return "saturate-200 contrast-125 drop-shadow-[0_0_10px_rgba(236,72,153,0.6)]";
-      if (aura === 'soft') return "brightness-[1.15] drop-shadow-[0_0_15px_rgba(255,255,255,0.6)]";
-      if (aura === 'electric') return "brightness-110 hue-rotate-[220deg] saturate-200";
-      if (aura === 'fire') return "brightness-110 saturate-[250%] sepia hue-rotate-[-30deg]";
-      if (aura === 'shadow') return "grayscale contrast-[150%] brightness-75";
-      return "";
-    };
+    <!-- 介面一：結算中心 -->
+    <div id="view-calc" class="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
+        <!-- 左側：輸入區 -->
+        <div class="lg:col-span-5 glass-panel rounded-2xl p-6 md:p-8 control-panel">
+            <div class="flex flex-col md:flex-row justify-between md:items-center mb-6 border-b-2 border-gray-600/50 pb-3 gap-2">
+                <h2 class="text-2xl font-black text-white tracking-wider drop-shadow-md">
+                    <i class="fa-solid fa-pen-to-square text-blue-400 mr-2"></i>輸入戰報
+                </h2>
+                <span class="text-[10px] md:text-xs font-bold bg-indigo-900/80 border border-indigo-400 text-indigo-200 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)] whitespace-nowrap">
+                    滿100分+1｜滿300分+2｜第一名+1｜最佳進步+1
+                </span>
+            </div>
+            <div class="space-y-4" id="input-container">
+                <!-- Inputs generated by JS -->
+            </div>
+            <button onclick="calculateResults()" class="btn-3d mt-8 w-full py-4 bg-gradient-to-b from-indigo-500 to-purple-700 hover:from-indigo-400 hover:to-purple-600 text-white font-black rounded-xl text-xl md:text-2xl tracking-widest border-2 border-purple-400">
+                <i class="fa-solid fa-bolt-lightning mr-2 text-yellow-300"></i>發動結算
+            </button>
+        </div>
 
-    const TITLE_CONDITIONS = [
-      { title: '【每週之星】', condition: '曾達成每週評比前三名', key: 'hasBeenTop3Weekly' },
-      { title: '【名人堂】', condition: '曾登錄歷史殿堂中', key: 'hasBeenHoF' },
-      { title: '【MVP】', condition: '曾經在大明星中', key: 'hasBeenS' },
-      { title: '【關鍵】', condition: '曾經在關鍵戰將中', key: 'hasBeenA' },
-      { title: '【職業】', condition: '曾經在職業選手中', key: 'hasBeenB' },
-      { title: '【賭神】', condition: '擲骰子贏過系統', key: 'hasWonDice' },
-      { title: '【努力家】', condition: '認真點數曾達 5 點', key: 'hasBeenHardworker' },
-      { title: '【守護天使】', condition: 'Keep點數曾達 5 點', key: 'hasBeenAngel' },
-    ];
+        <!-- 右側：長條圖與結算報告 -->
+        <div class="lg:col-span-7 space-y-6 md:space-y-8 display-panel">
+            <div class="glass-panel rounded-2xl p-6 md:p-8">
+                <h2 class="text-2xl font-black mb-6 text-white border-b-2 border-gray-600/50 pb-3 drop-shadow-md flex justify-between items-center">
+                    <span><i class="fa-solid fa-chart-column text-pink-400 mr-2"></i>軍事實力排行</span>
+                    <span id="calc-count-display" class="text-sm text-gray-400 font-bold bg-gray-800 px-3 py-1 rounded-lg">結算次數：0</span>
+                </h2>
+                <div id="chart-container" class="space-y-4 min-h-[200px]">
+                    <div class="text-center text-gray-400 py-10 font-bold text-lg border-2 border-dashed border-gray-600 rounded-xl">等待戰鬥結算...</div>
+                </div>
+            </div>
 
-    function StarArenaApp() {
-      const [isStudentMode, setIsStudentMode] = useState(false);
-      const [studentConfig, setStudentConfig] = useState({ room: '', studentId: null, token: '' });
-      
-      const [firebaseConfigInput, setFirebaseConfigInput] = useState(() => localStorage.getItem('starArena_fbConfig') || '');
-      const [fbRoomId, setFbRoomId] = useState(() => localStorage.getItem('starArena_fbRoomId') || 'Arena_Class101');
-      const [adminPassword, setAdminPassword] = useState(() => localStorage.getItem('starArena_adminPassword') || 'star1234');
-      const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
-      const dbRef = useRef(null);
+            <div class="glass-panel rounded-2xl p-6 md:p-8">
+                <h2 class="text-xl font-black mb-4 text-yellow-400 border-b-2 border-gray-600/50 pb-3 drop-shadow-md">
+                    <i class="fa-solid fa-gavel mr-2"></i>行動力配發戰報
+                </h2>
+                <ul id="action-report" class="space-y-3 text-sm md:text-base min-h-[150px]">
+                    <li class="text-gray-400 text-center py-6 font-bold bg-gray-800/50 rounded-xl border border-gray-700">尚未產生行動力</li>
+                </ul>
+            </div>
+        </div>
+    </div>
 
-      const [activeTab, setActiveTab] = useState('avatar'); 
-      const [selectedId, setSelectedId] = useState(1);
-      const [studyScore, setStudyScore] = useState(0);
-      const [keepScore, setKeepScore] = useState(0);
-      
-      const [isBatchMode, setIsBatchMode] = useState(false);
-      const [batchSelection, setBatchSelection] = useState([]);
-      const [batchStudyDelta, setBatchStudyDelta] = useState('');
-      const [batchKeepDelta, setBatchKeepDelta] = useState('');
-
-      const [diceState, setDiceState] = useState(null);
-      const [avatarSelectedId, setAvatarSelectedId] = useState(1);
-      const [inputNickname, setInputNickname] = useState('');
-      const [avatarClassTag, setAvatarClassTag] = useState(''); 
-      const [isGenerating, setIsGenerating] = useState(false);
-
-      const [toastMsg, setToastMsg] = useState("");
-      const [showResetConfirm, setShowResetConfirm] = useState(false);
-      const [showSettleConfirm, setShowSettleConfirm] = useState(false); 
-      const [showQrWall, setShowQrWall] = useState(false); 
-      const [achievementQueue, setAchievementQueue] = useState([]); 
-
-      const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 3000); };
-
-      const generateInitialStudents = () => {
-        const list = [];
-        // 包含 10 號與 29 號，生成 1 到 29 號
-        for (let i = 1; i <= 29; i++) {
-          list.push({ 
-            id: i, name: `${i}號`, nickname: '', prefixTitle: '', avatar: '', effect: '', aura: '', 
-            study: 0, keep: 0, weeklyGood: 0, weeklyBad: 0, dicePlayed: false, diceWon: false,
-            hasBeenTop3Weekly: false, hasBeenHoF: false, hasBeenS: false, hasBeenA: false, hasBeenB: false, hasWonDice: false,
-            hasBeenHardworker: false, hasBeenAngel: false
-          });
-        }
-        return list;
-      };
-
-      const [students, setStudents] = useState(generateInitialStudents());
-      const [historyData, setHistoryData] = useState([]);
-      const [matchData, setMatchData] = useState({ phase: 'idle', teams: [], turnIndex: 0 });
-
-      useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const room = params.get('room');
-        const studentId = params.get('studentId');
-        const token = params.get('token');
-        if (room && studentId && token) {
-          setIsStudentMode(true);
-          setStudentConfig({ room, studentId: parseInt(studentId), token });
-          setFbRoomId(room);
-          setAvatarSelectedId(parseInt(studentId));
-        }
-        const localStudents = localStorage.getItem('starArena_students');
-        if (localStudents) setStudents(JSON.parse(localStudents));
-      }, []);
-
-      // Firebase 智能解析連線模組
-      useEffect(() => {
-        if (!firebaseConfigInput.trim() || !fbRoomId.trim()) return;
-
-        const tryConnectFirebase = () => {
-          try {
-            let rawText = firebaseConfigInput.trim();
-            if (rawText.includes('{')) {
-              rawText = rawText.substring(rawText.indexOf('{'), rawText.lastIndexOf('}') + 1);
-            }
-            rawText = rawText.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":').replace(/'/g, '"');
+    <!-- 介面二：戰略地圖 -->
+    <div id="view-map" class="w-full max-w-7xl hidden flex-col lg:flex-row gap-6 md:gap-8">
+        <!-- 左側：行動控制台 -->
+        <div class="w-full lg:w-1/3 glass-panel rounded-2xl p-6 flex flex-col control-panel relative">
             
-            const config = JSON.parse(rawText);
-            if (!config.databaseURL) return;
-
-            if (firebase.apps.length > 0) {
-              firebase.apps.forEach(app => app.delete());
-            }
-
-            const app = firebase.initializeApp(config);
-            const database = firebase.database();
-            dbRef.current = database.ref(`star_arena_rooms/${fbRoomId}`);
+            <h2 class="text-2xl font-black text-white mb-4 border-b-2 border-gray-600/50 pb-3 drop-shadow-md">
+                <i class="fa-solid fa-satellite-dish text-green-400 mr-2"></i>戰略指揮所
+            </h2>
+            <p class="text-sm text-gray-300 mb-6 bg-blue-900/30 border border-blue-500/50 p-4 rounded-xl leading-relaxed">
+                <i class="fa-solid fa-circle-info text-blue-400 mr-1"></i> 選擇下方陣營，點擊地圖上 <span class="font-bold text-white bg-white/20 px-1 rounded">閃爍白光</span> 處擴張領地！可以直接點擊 `+` / `-` 修改行動力。
+            </p>
             
-            setIsFirebaseConnected(true);
-            showToast("⚡ Firebase 雲端通道已安全建立！");
+            <div id="team-selectors" class="space-y-4 flex-grow">
+                <!-- Team selectors generated by JS -->
+            </div>
 
-            dbRef.current.on('value', (snapshot) => {
-              const data = snapshot.val();
-              if (data) {
-                if (data.students) setStudents(data.students);
-                if (data.historyData) setHistoryData(data.historyData);
-                if (data.matchData) setMatchData(data.matchData);
-              }
+            <div class="mt-8 pt-6 border-t-2 border-gray-600/50 space-y-3">
+                <button onclick="triggerAlliance()" class="btn-3d w-full py-3 bg-gradient-to-b from-yellow-600 to-yellow-800 text-white rounded-xl font-black border border-yellow-500 shadow-[0_0_15px_rgba(202,138,4,0.5)] hover:brightness-110">
+                    <i class="fa-solid fa-handshake mr-2 drop-shadow-md"></i>弱勢結盟配給
+                </button>
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-gray-700/50 flex gap-2">
+                <button onclick="generateRandomChests(1)" class="btn-3d flex-1 py-2 text-xs bg-gray-800 text-gray-300 rounded-lg border border-gray-600 hover:bg-gray-700">+寶箱</button>
+                <button onclick="generateRandomBosses(1)" class="btn-3d flex-1 py-2 text-xs bg-gray-800 text-gray-300 rounded-lg border border-gray-600 hover:bg-gray-700">+魔王</button>
+                <button onclick="generateRandomMysteries(1)" class="btn-3d flex-1 py-2 text-xs bg-gray-800 text-gray-300 rounded-lg border border-gray-600 hover:bg-gray-700">+事件</button>
+            </div>
+
+            <button onclick="startManualDeploy()" class="btn-3d w-full mt-3 py-2 bg-gradient-to-b from-slate-600 to-slate-800 text-white rounded-xl font-bold border border-slate-500 text-sm shadow-md hover:brightness-110">
+                <i class="fa-solid fa-map-location-dot mr-2"></i>自訂初始領地
+            </button>
+        </div>
+
+        <!-- 右側：六角格地圖 -->
+        <div class="w-full lg:w-2/3 glass-panel rounded-2xl p-6 relative flex flex-col justify-between border-2 border-blue-500/20 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] min-h-[600px] display-panel">
+            
+            <!-- 戰報日誌 (左上角懸浮) -->
+            <div id="action-log-container" class="absolute top-4 left-4 w-48 md:w-64 bg-gray-900/80 p-3 rounded-xl border border-gray-700/50 shadow-lg pointer-events-none z-30 transition-all">
+                <h4 class="text-xs text-gray-400 font-bold mb-2 border-b border-gray-700 pb-1"><i class="fa-solid fa-scroll mr-1"></i>戰報日誌</h4>
+                <ul id="action-log-list" class="text-xs space-y-1.5 font-bold tracking-wide"></ul>
+            </div>
+
+            <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] pointer-events-none rounded-2xl"></div>
+            
+            <div class="z-10 hex-grid-container w-full flex-grow flex items-center justify-center relative py-4" id="hex-map">
+                <!-- Hex map generated by JS -->
+            </div>
+            
+            <div class="w-full mt-4 bg-gray-900/80 p-4 rounded-2xl backdrop-blur-md border-2 border-gray-600 z-20 shadow-2xl relative">
+                <h3 id="progress-title" class="text-sm text-yellow-400 mb-3 font-black tracking-widest text-center drop-shadow-md flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-flag-checkered text-lg"></i> 爭霸進度 (率先 15 格者獲勝)
+                </h3>
+                <div id="progress-container" class="flex flex-col gap-3 px-2 mt-2">
+                    <!-- Progress bars by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 介面三：最高榮譽榜 -->
+    <div id="view-honor" class="w-full max-w-5xl hidden flex-col items-center justify-center glass-panel rounded-3xl p-6 md:p-12 relative overflow-hidden text-center mx-auto mt-6 border-2 border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]">
+        <div class="absolute inset-0 opacity-40 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] pointer-events-none"></div>
+        <i id="honor-crown" class="fa-solid fa-crown text-8xl text-gray-600 mb-6 drop-shadow-md z-10 transition-colors duration-1000"></i>
+        <h2 id="honor-title" class="text-4xl md:text-5xl font-black text-white mb-4 z-10 tracking-widest">賽季總冠軍</h2>
+        <h3 id="honor-team-name" class="text-4xl md:text-6xl font-black text-gray-500 mb-8 z-10 drop-shadow-2xl tracking-widest px-4 leading-tight">虛位以待</h3>
+        
+        <!-- 冠軍獎勵區塊 -->
+        <div id="honor-rewards" class="bg-gray-900/90 border-4 border-yellow-400 p-6 md:p-8 rounded-2xl z-10 w-full max-w-2xl space-y-6 shadow-[0_0_40px_rgba(234,179,8,0.4)] relative">
+            <div class="absolute -top-4 -left-4 text-4xl animate-bounce">✨</div>
+            <div class="absolute -bottom-4 -right-4 text-4xl animate-bounce" style="animation-delay: 0.5s;">🎁</div>
+            <div class="flex flex-col md:flex-row items-center justify-center md:space-x-4 text-xl md:text-2xl text-yellow-300 font-black gap-2">
+                <i class="fa-solid fa-arrow-trend-up text-3xl"></i>
+                <span id="reward-score-text">奪冠獎勵：本期總積分狂飆 <span class="text-white bg-gradient-to-r from-red-600 to-red-500 px-4 py-1 rounded-xl shadow-lg border border-red-400">+100 分</span></span>
+            </div>
+            <div class="flex flex-col md:flex-row items-center justify-center md:space-x-4 text-xl md:text-2xl text-blue-300 font-black border-t-2 border-gray-700/50 pt-6 mt-4 gap-2">
+                <i class="fa-solid fa-layer-group text-3xl"></i>
+                <span id="reward-pull-text">終極大獎：每人獲得小組抽卡 <span class="text-white bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-1 rounded-xl shadow-lg border border-blue-400">10 次</span></span>
+            </div>
+        </div>
+
+        <!-- 三大特殊成就解鎖 -->
+        <h4 class="text-2xl font-black text-white mt-12 mb-2 z-10 tracking-widest"><i class="fa-solid fa-medal text-yellow-400 mr-2"></i>賽季殊榮殿堂</h4>
+        <p class="text-sm text-gray-400 mb-4 z-10">達成成就之隊伍，全員解鎖：<span class="text-yellow-400 font-bold">+10分 / 每人額外抽卡 1 次</span></p>
+        <div id="honor-achievements" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 z-10 w-full max-w-4xl">
+            <!-- Dynamically Populated by JS -->
+        </div>
+        
+        <div class="z-10 w-full max-w-3xl bg-gray-900/90 border-2 border-gray-600 rounded-2xl p-6 md:p-8 shadow-2xl mt-4">
+            <h4 class="text-2xl font-black text-white mb-6 border-b-2 border-gray-700 pb-4 flex items-center justify-center tracking-widest">
+                <i class="fa-solid fa-ranking-star text-purple-400 mr-3 text-3xl"></i>賽季最終領地排行榜
+            </h4>
+            <div id="honor-ranking" class="space-y-4">
+                <div class="text-center text-gray-500 py-6 font-bold text-lg">戰鬥尚未結束，目前無排名紀錄...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 介面四：系統設定 -->
+    <div id="view-settings" class="w-full max-w-6xl hidden flex-col gap-6 md:gap-8">
+        <div class="glass-panel rounded-2xl p-6 md:p-10">
+            <h2 class="text-3xl font-black text-white tracking-wider drop-shadow-md mb-8 border-b-2 border-gray-600 pb-4 flex items-center">
+                <i class="fa-solid fa-gear text-gray-400 mr-3"></i>系統與陣營設定
+            </h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- 左側：修改陣營名稱 -->
+                <div>
+                    <h3 class="text-xl font-bold text-yellow-400 mb-4 flex items-center"><i class="fa-solid fa-palette mr-2"></i>陣營外觀自訂</h3>
+                    <p class="text-sm text-gray-400 mb-4">在此修改各陣營的圖示與顯示名稱。變更會自動儲存並同步至所有介面。</p>
+                    <div id="settings-teams" class="space-y-3">
+                        <!-- JS generated team inputs -->
+                    </div>
+                </div>
+
+                <!-- 右側：互換資料與系統管理 -->
+                <div class="space-y-6">
+                    <!-- 互換資料 -->
+                    <div class="bg-gray-800/80 p-6 rounded-2xl border border-gray-600 shadow-inner">
+                        <h3 class="text-xl font-bold text-blue-400 mb-3 flex items-center"><i class="fa-solid fa-right-left mr-2"></i>座位對調資料互換</h3>
+                        <p class="text-xs text-gray-300 mb-4 leading-relaxed bg-blue-900/40 p-3 rounded-lg border border-blue-500/50">
+                            當班級實體換座位時，可使用此功能將兩組的<span class="text-yellow-300 font-bold">所有領地、分數、名稱與專屬圖示無痛互換</span>，完美對應新座位！
+                        </p>
+                        <div class="flex items-center justify-between gap-4 mb-4">
+                            <select id="swap-team-a" class="w-full bg-gray-900 border-2 border-gray-500 text-white rounded-xl p-2 font-bold focus:border-blue-500 outline-none"></select>
+                            <i class="fa-solid fa-arrow-right-arrow-left text-xl text-gray-400"></i>
+                            <select id="swap-team-b" class="w-full bg-gray-900 border-2 border-gray-500 text-white rounded-xl p-2 font-bold focus:border-blue-500 outline-none"></select>
+                        </div>
+                        <button onclick="executeSwap()" class="btn-3d w-full py-3 bg-gradient-to-b from-blue-600 to-blue-800 text-white font-black rounded-xl text-sm md:text-base border-2 border-blue-400 shadow-lg hover:from-blue-500 hover:to-blue-700">
+                            <i class="fa-solid fa-bolt mr-2"></i>執行互換
+                        </button>
+                    </div>
+
+                    <!-- 進度檔與重置管理 -->
+                    <div class="bg-red-900/20 p-6 rounded-2xl border border-red-900/50 shadow-inner">
+                        <h3 class="text-xl font-bold text-red-400 mb-4 flex items-center"><i class="fa-solid fa-server mr-2"></i>系統資料管理</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="exportGameData()" class="btn-3d w-full py-3 bg-gradient-to-b from-teal-600 to-teal-800 text-white font-bold rounded-xl border border-teal-500 text-sm">
+                                <i class="fa-solid fa-download mr-1"></i>匯出進度
+                            </button>
+                            <button onclick="document.getElementById('import-file').click()" class="btn-3d w-full py-3 bg-gradient-to-b from-indigo-600 to-indigo-800 text-white font-bold rounded-xl border border-indigo-500 text-sm">
+                                <i class="fa-solid fa-upload mr-1"></i>匯入進度
+                            </button>
+                            <input type="file" id="import-file" accept=".json" class="hidden" onchange="importGameData(event)">
+                            
+                            <button onclick="resetSeason()" class="btn-3d col-span-2 w-full py-3 mt-2 bg-gradient-to-b from-red-700 to-red-900 text-red-100 font-black rounded-xl border-2 border-red-500 shadow-lg">
+                                <i class="fa-solid fa-skull mr-2"></i>重置天下 (清除所有資料)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遊戲自定義彈窗 UI (果凍動畫) -->
+    <div id="modal-overlay" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-800 border-4 border-gray-500 rounded-3xl p-8 max-w-md w-full text-center shadow-[0_0_50px_rgba(0,0,0,0.9)] transition-all" id="event-modal">
+            <i id="event-icon" class="fa-solid fa-box-open text-7xl mb-6 text-gray-300"></i>
+            <h2 class="text-3xl font-black text-white mb-3 tracking-wide" id="event-title">發現神秘寶箱！</h2>
+            <p class="text-lg md:text-xl mb-8 font-bold whitespace-pre-line leading-relaxed text-gray-300" id="event-desc">獲得獎勵</p>
+            <div class="flex justify-center space-x-4">
+                <button onclick="closeModal()" id="event-cancel-btn" class="btn-3d hidden px-8 py-3 font-black rounded-xl bg-gray-600 hover:bg-gray-500 text-white border-2 border-gray-400 text-lg">取消</button>
+                <button onclick="closeModal()" id="event-btn" class="btn-3d px-8 py-3 font-black rounded-xl bg-blue-500 hover:bg-blue-400 text-white border-2 border-blue-300 text-lg">確認</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 神秘事件抉擇 Modal -->
+    <div id="mystery-choice-overlay" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-800 border-4 border-blue-500 rounded-3xl p-6 md:p-8 max-w-lg w-full text-center shadow-[0_0_50px_rgba(59,130,246,0.4)] modal-jelly">
+            <i class="fa-solid fa-scale-balanced text-7xl mb-6 text-blue-400 animate-pulse"></i>
+            <h2 class="text-3xl font-black text-white mb-3 tracking-wide">命運的抉擇</h2>
+            <p class="text-lg text-gray-300 mb-8 font-bold leading-relaxed">前方出現了兩股強大的未知能量。<br>請大聲喊出你們的選擇，揭曉命運！</p>
+            <div class="flex flex-col md:flex-row justify-center gap-4">
+                <button onclick="makeMysteryChoice('red')" class="btn-3d flex-1 py-4 font-black rounded-xl bg-gradient-to-b from-red-600 to-red-800 text-white border-2 border-red-400 text-xl hover:brightness-110">
+                    <i class="fa-solid fa-fire mr-2"></i>赤炎法陣
+                </button>
+                <button onclick="makeMysteryChoice('blue')" class="btn-3d flex-1 py-4 font-black rounded-xl bg-gradient-to-b from-blue-600 to-blue-800 text-white border-2 border-blue-400 text-xl hover:brightness-110">
+                    <i class="fa-solid fa-water mr-2"></i>蒼冰法陣
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // === 🎵 Web Audio API 晶片合聲音效 ===
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+        }
+
+        function playSound(type) {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+                
+                const t = audioCtx.currentTime + 0.02; // 增加微小緩衝時間確保音效播放
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+
+                // 提升所有音效的基礎音量 (gain.gain.setValueAtTime 從 0.15 調整至 0.4)
+                if (type === 'click') {
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(800, t); osc.frequency.exponentialRampToValueAtTime(1200, t + 0.05);
+                    gain.gain.setValueAtTime(0.4, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+                    osc.start(t); osc.stop(t + 0.05);
+                } else if (type === 'occupy') {
+                    osc.type = 'square'; osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+                    gain.gain.setValueAtTime(0.4, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+                    osc.start(t); osc.stop(t + 0.15);
+                } else if (type === 'chest') {
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(523.25, t); osc.frequency.setValueAtTime(659.25, t + 0.1); 
+                    osc.frequency.setValueAtTime(783.99, t + 0.2); osc.frequency.setValueAtTime(1046.50, t + 0.3); 
+                    gain.gain.setValueAtTime(0.4, t); gain.gain.linearRampToValueAtTime(0, t + 0.4);
+                    osc.start(t); osc.stop(t + 0.4);
+                } else if (type === 'boss') {
+                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, t); osc.frequency.linearRampToValueAtTime(40, t + 0.5);
+                    const osc2 = audioCtx.createOscillator(); osc2.type = 'square'; osc2.frequency.setValueAtTime(55, t);
+                    osc2.connect(gain); osc2.start(t); osc2.stop(t + 0.5);
+                    gain.gain.setValueAtTime(0.4, t); gain.gain.linearRampToValueAtTime(0, t + 0.5);
+                    osc.start(t); osc.stop(t + 0.5);
+                } else if (type === 'calc') {
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(300, t); osc.frequency.exponentialRampToValueAtTime(800, t + 0.4);
+                    gain.gain.setValueAtTime(0, t); gain.gain.linearRampToValueAtTime(0.3, t + 0.2); gain.gain.linearRampToValueAtTime(0, t + 0.4);
+                    osc.start(t); osc.stop(t + 0.4);
+                } else if (type === 'victory') {
+                    osc.type = 'square'; osc.frequency.setValueAtTime(392.00, t); osc.frequency.setValueAtTime(392.00, t + 0.15); 
+                    osc.frequency.setValueAtTime(392.00, t + 0.3); osc.frequency.setValueAtTime(523.25, t + 0.45); 
+                    gain.gain.setValueAtTime(0.4, t); gain.gain.linearRampToValueAtTime(0, t + 1.5);
+                    osc.start(t); osc.stop(t + 1.5);
+                } else if (type === 'mystery') {
+                    osc.type = 'triangle'; osc.frequency.setValueAtTime(200, t); osc.frequency.linearRampToValueAtTime(800, t + 0.2);
+                    osc.frequency.linearRampToValueAtTime(100, t + 0.4); osc.frequency.linearRampToValueAtTime(1000, t + 0.6);
+                    gain.gain.setValueAtTime(0.4, t); gain.gain.linearRampToValueAtTime(0, t + 0.6);
+                    osc.start(t); osc.stop(t + 0.6);
+                }
+            } catch (e) { console.log("Audio API failed:", e); }
+        }
+
+        let bgmInterval = null; let bgmStep = 0; let isMusicPlaying = false;
+        const bgmNotes = [130.81, 196.00, 155.56, 196.00, 130.81, 196.00, 155.56, 196.00, 116.54, 174.61, 146.83, 174.61, 116.54, 174.61, 146.83, 174.61];
+
+        function playBGMStep() {
+            if (!isMusicPlaying) return;
+            const t = audioCtx.currentTime + 0.02; const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+            osc.type = 'square'; osc.frequency.setValueAtTime(bgmNotes[bgmStep], t);
+            gain.gain.setValueAtTime(0.1, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(t); osc.stop(t + 0.15);
+            bgmStep = (bgmStep + 1) % bgmNotes.length;
+        }
+
+        function toggleBGM() {
+            initAudio(); playSound('click');
+            const icon = document.getElementById('bgm-icon');
+            if (isMusicPlaying) {
+                isMusicPlaying = false; clearInterval(bgmInterval);
+                icon.className = "fa-solid fa-volume-xmark text-gray-300";
+            } else {
+                isMusicPlaying = true; bgmStep = 0; bgmInterval = setInterval(playBGMStep, 200); 
+                icon.className = "fa-solid fa-volume-high text-green-400 animate-pulse";
+            }
+        }
+        window.toggleBGM = toggleBGM;
+
+        // === 展演模式 ===
+        let isPresentation = false;
+        function togglePresentation() {
+            playSound('click');
+            isPresentation = !isPresentation;
+            document.body.classList.toggle('presentation-active', isPresentation);
+            const icon = document.getElementById('pres-icon');
+            if (isPresentation) {
+                icon.className = "fa-solid fa-compress text-yellow-300";
+                triggerEventModal("🎥 展演模式已開啟", "已隱藏控制面板以最佳化全螢幕顯示。再次點擊按鈕可退出。");
+            } else {
+                icon.className = "fa-solid fa-expand text-white";
+            }
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
+        }
+        window.togglePresentation = togglePresentation;
+
+        // === 戰報日誌系統 ===
+        let gameLogs = [];
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString('zh-TW', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            gameLogs.unshift(`[${time}] ${msg}`);
+            if (gameLogs.length > 5) gameLogs.pop();
+            renderLogs();
+        }
+        window.addLog = addLog;
+
+        function renderLogs() {
+            const list = document.getElementById('action-log-list');
+            if(!list) return;
+            const opacities = ['opacity-100', 'opacity-75', 'opacity-50', 'opacity-25', 'opacity-10'];
+            list.innerHTML = gameLogs.map((log, i) => {
+                const opClass = opacities[i] || 'opacity-10';
+                const textClass = i === 0 ? 'text-white' : 'text-gray-400';
+                return `<li class="${textClass} ${opClass} transition-opacity duration-300 border-l-2 border-blue-500/50 pl-2 py-0.5">${log}</li>`;
+            }).join('');
+        }
+
+        // === 資料狀態與防護 ===
+        const defaultTeamNames = { team1: '第一組', team2: '第二組', team3: '第三組', team4: '第四組', team5: '第五組' };
+        const defaultTeamIcons = { team1: 'fa-user-ninja', team2: 'fa-microphone-lines', team3: 'fa-robot', team4: 'fa-basketball', team5: 'fa-gamepad' };
+        let teams = [
+            { id: 'team1', name: '第一組', color: 'text-yellow-400', hexBg: '#ca8a04', icon: 'fa-user-ninja', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 },
+            { id: 'team2', name: '第二組', color: 'text-pink-400', hexBg: '#db2777', icon: 'fa-microphone-lines', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 },
+            { id: 'team3', name: '第三組', color: 'text-red-400', hexBg: '#dc2626', icon: 'fa-robot', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 },
+            { id: 'team4', name: '第四組', color: 'text-orange-400', hexBg: '#ea580c', icon: 'fa-basketball', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 },
+            { id: 'team5', name: '第五組', color: 'text-cyan-400', hexBg: '#0891b2', icon: 'fa-gamepad', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 }
+        ];
+
+        const mapRows = 8; const mapCols = 10;
+        let mapData = []; let selectedTeamId = null; let calcCount = 0;
+        let currentAlliance = []; 
+        const winCondition = 15; let activeModalCallback = null;
+        let isManualDeployMode = false; let deployingTeamIndex = 0;
+        let pendingMysteryTeam = null; 
+
+        // 安全檢測核心：避免因為資料破損導致的 TypeError
+        function checkAndRepairData() {
+            let repaired = false;
+            if (!teams || !Array.isArray(teams) || teams.length !== 5) {
+                console.warn("Teams data corrupted. Repairing...");
+                teams = [
+                    { id: 'team1', name: '第一組', color: 'text-yellow-400', hexBg: '#ca8a04', icon: 'fa-user-ninja', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 },
+                    { id: 'team2', name: '第二組', color: 'text-pink-400', hexBg: '#db2777', icon: 'fa-microphone-lines', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 },
+                    { id: 'team3', name: '第三組', color: 'text-red-400', hexBg: '#dc2626', icon: 'fa-robot', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 },
+                    { id: 'team4', name: '第四組', color: 'text-orange-400', hexBg: '#ea580c', icon: 'fa-basketball', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 },
+                    { id: 'team5', name: '第五組', color: 'text-cyan-400', hexBg: '#0891b2', icon: 'fa-gamepad', lastScore: 0, currentScore: 0, progress: 0, moves: 0, territories: 1, nextPeriodModifier: 0, tempInput: '', lastDiff: 0, bossKills: 0, totalMovesGained: 0, chestsOpened: 0 }
+                ];
+                repaired = true;
+            }
+            if (!mapData || !Array.isArray(mapData) || mapData.length !== mapRows || !Array.isArray(mapData[0]) || mapData[0].length !== mapCols) {
+                console.warn("Map data corrupted. Repairing...");
+                
+                // 強制重建乾淨的結構，防止 undefined 錯誤
+                let newMapData = [];
+                for (let r = 0; r < mapRows; r++) { 
+                    let row = []; 
+                    for (let c = 0; c < mapCols; c++) {
+                        row.push({ owner: null, hasChest: false, hasBoss: false, hasMystery: false }); 
+                    }
+                    newMapData.push(row); 
+                }
+                mapData = newMapData;
+
+                try {
+                    loadHalfwayData();
+                } catch(e) { console.error("Failed to load halfway data", e); }
+                
+                repaired = true;
+            }
+            return repaired;
+        }
+
+        // === 復原/時光倒流機制 ===
+        let actionHistory = [];
+        function saveHistory() {
+            if (actionHistory.length >= 5) actionHistory.shift();
+            actionHistory.push(JSON.stringify({
+                teams: teams, mapData: mapData, calcCount: calcCount, selectedTeamId: selectedTeamId, currentAlliance: currentAlliance
+            }));
+        }
+        window.saveHistory = saveHistory;
+
+        function undoAction() {
+            playSound('click');
+            if (actionHistory.length === 0) { triggerEventModal("提示", "目前沒有可以復原的動作記錄。"); return; }
+            let lastStateStr = actionHistory.pop(); let lastState = JSON.parse(lastStateStr);
+            teams = lastState.teams; mapData = lastState.mapData; calcCount = lastState.calcCount; 
+            selectedTeamId = lastState.selectedTeamId; currentAlliance = lastState.currentAlliance || [];
+            
+            saveGame(); updateUIFromState();
+            addLog(`導師執行了時光倒流 (復原操作)`);
+            triggerEventModal("⏪ 復原成功", "已成功回到上一步的戰局狀態！");
+        }
+        window.undoAction = undoAction;
+
+        // === 雲端自動存檔系統 ===
+        let db, currentUser, appId;
+
+        async function saveGame() {
+            teams.forEach(team => { 
+                const currEl = document.getElementById(`curr-${team.id}`); 
+                if (currEl) team.tempInput = currEl.value; 
+                const lastEl = document.getElementById(`last-${team.id}`);
+                if (lastEl) team.lastScore = parseFloat(lastEl.value) || 0; 
             });
-          } catch (e) {
-            setIsFirebaseConnected(false);
-          }
+            const gameData = { teams, mapData: JSON.stringify(mapData), selectedTeamId, calcCount, currentAlliance };
+            try { localStorage.setItem('classroomConquestSave', JSON.stringify(gameData)); } catch(e){}
+
+            if (!currentUser || !db) return;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameState', 'current');
+                await setDoc(docRef, gameData);
+            } catch (error) { console.error("雲端存檔失敗:", error); }
+        }
+        window.saveGame = saveGame;
+
+        async function loadGameCloud() {
+            if (!currentUser || !db) return false;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameState', 'current');
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    teams = data.teams || teams; currentAlliance = data.currentAlliance || [];
+                    if (data.mapData) mapData = typeof data.mapData === 'string' ? JSON.parse(data.mapData) : data.mapData;
+                    selectedTeamId = data.selectedTeamId || null; calcCount = data.calcCount || 0;
+                    return true;
+                }
+            } catch (e) { console.error("雲端讀取失敗:", e); }
+            return false;
+        }
+
+        function loadGameLocal() {
+            try {
+                const saved = localStorage.getItem('classroomConquestSave');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    teams = data.teams || teams; currentAlliance = data.currentAlliance || [];
+                    if (data.mapData) mapData = typeof data.mapData === 'string' ? JSON.parse(data.mapData) : data.mapData;
+                    selectedTeamId = data.selectedTeamId || null; calcCount = data.calcCount || 0;
+                    return true;
+                }
+            } catch(e) {}
+            return false;
+        }
+
+        function updateInputData() { saveGame(); }
+        window.updateInputData = updateInputData;
+
+        // === 系統初始化 ===
+        const initFirebaseAndStart = async () => {
+            addLog("系統初始化完成");
+            try {
+                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+                if (!firebaseConfig) { fallbackInit(); return; }
+                
+                const app = initializeApp(firebaseConfig); const auth = getAuth(app);
+                db = getFirestore(app); appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+                else await signInAnonymously(auth);
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        currentUser = user;
+                        let loaded = await loadGameCloud(); if (!loaded) loaded = loadGameLocal();
+                        
+                        if (!loaded || mapData.length === 0) { 
+                            // Ensure mapData structure exists before loading
+                            checkAndRepairData();
+                            teams.forEach(t => {
+                                if (t.id === 'team1') t.nextPeriodModifier = -5;
+                                if (t.id === 'team2') t.nextPeriodModifier = 7;
+                                if (t.id === 'team3') t.nextPeriodModifier = 4;
+                                if (t.id === 'team4') t.nextPeriodModifier = 0;
+                                if (t.id === 'team5') t.nextPeriodModifier = 0;
+                            });
+                            saveGame(); 
+                        }
+                        
+                        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'gameState', 'current');
+                        onSnapshot(docRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                const data = docSnap.data();
+                                teams = data.teams || teams; currentAlliance = data.currentAlliance || [];
+                                if (data.mapData) mapData = typeof data.mapData === 'string' ? JSON.parse(data.mapData) : data.mapData;
+                                selectedTeamId = data.selectedTeamId || null; calcCount = data.calcCount || 0;
+                                updateUIFromState();
+                            }
+                        });
+                        updateUIFromState();
+                    }
+                });
+            } catch (e) { console.error("Firebase Init Failed", e); fallbackInit(); }
         };
 
-        tryConnectFirebase();
-        return () => { if (dbRef.current) dbRef.current.off(); };
-      }, [firebaseConfigInput, fbRoomId]);
-
-      const syncToFirebaseAndLocal = (newStudents, newHistory, newMatch) => {
-        setStudents(newStudents);
-        localStorage.setItem('starArena_students', JSON.stringify(newStudents));
-        if (dbRef.current && isFirebaseConnected) {
-          dbRef.current.update({
-            students: newStudents,
-            ...(newHistory && { historyData: newHistory }),
-            ...(newMatch && { matchData: newMatch })
-          }).catch(e => console.error("寫入失敗:", e));
-        }
-      };
-
-      const calculateStudentToken = (room, id) => {
-        const raw = `${room}_Seat${id}_SecuredBy_${adminPassword}`;
-        let hash = 0;
-        for (let i = 0; i < raw.length; i++) { hash = (hash << 5) - hash + raw.charCodeAt(i); hash |= 0; }
-        return `TK-${Math.abs(hash)}`;
-      };
-
-      const handleStudentSelfUpdate = (targetId, updatedFields) => {
-        const expectedToken = calculateStudentToken(fbRoomId, targetId);
-        if (studentConfig.token !== expectedToken) { alert("❌ 驗證失敗！"); return; }
-        const updated = students.map(s => (s.id === targetId ? { ...s, ...updatedFields } : s));
-        syncToFirebaseAndLocal(updated, null, null);
-        showToast("✨ 外觀調整已即時同步！");
-      };
-
-      const activeStudents = useMemo(() => {
-        return students.map(s => {
-          const total = s.study + s.keep;
-          let tier = 'D';
-          if (total >= 14) tier = 'S';
-          else if (total >= 10) tier = 'A';
-          else if (total >= 6) tier = 'B';
-          else if (total >= 1) tier = 'C';
-          return { ...s, totalScore: total, tier };
-        });
-      }, [students]);
-
-      useEffect(() => {
-        const cur = students.find(s => s.id === selectedId);
-        if (cur) { setStudyScore(cur.study); setKeepScore(cur.keep); }
-      }, [selectedId, students]);
-
-      useEffect(() => {
-        const cur = students.find(s => s.id === avatarSelectedId);
-        if (cur) setInputNickname(cur.nickname || '');
-      }, [avatarSelectedId, students]);
-
-      useEffect(() => {
-        if (showQrWall) {
-          students.forEach(s => {
-            const container = document.getElementById(`qrcode-box-${s.id}`);
-            if (container) {
-              container.innerHTML = "";
-              const baseUrl = window.location.origin + window.location.pathname;
-              const token = calculateStudentToken(fbRoomId, s.id);
-              const loginUrl = `${baseUrl}?room=${fbRoomId}&studentId=${s.id}&token=${token}`;
-              new QRCode(container, { text: loginUrl, width: 95, height: 95, colorDark : "#ffffff", colorLight : "#1e293b" });
+        function fallbackInit() {
+            if (!loadGameLocal() || mapData.length === 0) { 
+                checkAndRepairData();
+                teams.forEach(t => {
+                    if (t.id === 'team1') t.nextPeriodModifier = -5;
+                    if (t.id === 'team2') t.nextPeriodModifier = 7;
+                    if (t.id === 'team3') t.nextPeriodModifier = 4;
+                    if (t.id === 'team4') t.nextPeriodModifier = 0;
+                    if (t.id === 'team5') t.nextPeriodModifier = 0;
+                });
+                saveGame(); 
             }
-          });
-        }
-      }, [showQrWall, students, fbRoomId, adminPassword]);
-
-      const pushAchievement = (studentName, title) => {
-        setAchievementQueue(prev => [...prev, { id: Date.now(), studentName, title }]);
-      };
-
-      const handleSingleScoreUpdate = () => {
-        const updated = students.map(s => {
-          if (s.id === selectedId) {
-            const oldTotal = s.study + s.keep;
-            const newStudy = Math.max(0, studyScore);
-            const newKeep = Math.max(0, keepScore);
-            let news = { ...s, study: newStudy, keep: newKeep };
-            if (newStudy >= 5 && !s.hasBeenHardworker) { news.hasBeenHardworker = true; pushAchievement(s.nickname||s.name, '【努力家】'); }
-            if (newKeep >= 5 && !s.hasBeenAngel) { news.hasBeenAngel = true; pushAchievement(s.nickname||s.name, '【守護天使】'); }
-            if ((newStudy+newKeep) >= 14 && oldTotal < 14 && !s.hasBeenS) { news.hasBeenS = true; pushAchievement(s.nickname||s.name, '【MVP】'); }
-            return news;
-          }
-          return s;
-        });
-        syncToFirebaseAndLocal(updated, null, null);
-        playAddSfx();
-        showToast("分數已成功變更！");
-      };
-
-      const handleRollDice = (targetId) => {
-        const sRoll = Math.floor(Math.random() * 6) + Math.floor(Math.random() * 6) + 2;
-        const sysRoll = Math.floor(Math.random() * 6) + Math.floor(Math.random() * 6) + 2;
-        const won = sRoll > sysRoll;
-        const updated = students.map(s => {
-          if (s.id === targetId) {
-            let news = { ...s, dicePlayed: true, diceWon: won };
-            if (won && !s.hasWonDice) { news.hasWonDice = true; pushAchievement(s.nickname||s.name, '【賭神】'); }
-            return news;
-          }
-          return s;
-        });
-        setDiceState({ studentId: targetId, s1: Math.floor(sRoll/2), s2: sRoll - Math.floor(sRoll/2), sys1: Math.floor(sysRoll/2), sys2: sysRoll - Math.floor(sysRoll/2), won });
-        syncToFirebaseAndLocal(updated, null, null);
-      };
-
-      const toggleBatchSelection = (id) => {
-        setBatchSelection(batchSelection.includes(id) ? batchSelection.filter(x => x !== id) : [...batchSelection, id]);
-      };
-
-      const handleBatchSubmit = () => {
-        const dStudy = parseInt(batchStudyDelta) || 0; const dKeep = parseInt(batchKeepDelta) || 0;
-        const updated = students.map(s => {
-          if (batchSelection.includes(s.id)) {
-            return { ...s, study: Math.max(0, s.study + dStudy), keep: Math.max(0, s.keep + dKeep) };
-          }
-          return s;
-        });
-        syncToFirebaseAndLocal(updated, null, null);
-        setBatchSelection([]); setBatchStudyDelta(''); setBatchKeepDelta('');
-        playAddSfx();
-      };
-
-      const triggerGenerateAvatar = async (targetId) => {
-        setIsGenerating(true);
-        try {
-          const kw = avatarClassTag ? `${avatarClassTag}, anime` : "cyberpunk avatar";
-          const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(kw)}?width=200&height=200&nologo=true&seed=${Math.floor(Math.random()*999)}`;
-          const updated = students.map(s => (s.id === targetId ? { ...s, avatar: imageUrl } : s));
-          syncToFirebaseAndLocal(updated, null, null);
-        } catch(e){} finally { setIsGenerating(false); }
-      };
-
-      const handleGenerateTeams = () => {
-        let pool = [...activeStudents].sort((a, b) => b.totalScore - a.totalScore);
-        let t1 = [], t2 = [];
-        pool.forEach((st, idx) => {
-          if (idx % 2 === 0) t1.push({ id: st.id, name: st.nickname || st.name, score: st.totalScore });
-          else t2.push({ id: st.id, name: st.nickname || st.name, score: st.totalScore });
-        });
-        syncToFirebaseAndLocal(students, null, { phase: 'ready', teams: [ { name: '紅蓮隊', members: t1 }, { name: '蒼藍隊', members: t2 } ], turnIndex: 0 });
-        showToast("🏃 隊伍智能平衡切換完成！");
-      };
-
-      const handleResetScores = () => {
-        const updated = students.map(s => ({ ...s, study: 0, keep: 0, dicePlayed: false, diceWon: false }));
-        syncToFirebaseAndLocal(updated, null, null); setShowResetConfirm(false);
-      };
-
-      const handleSettleToHistory = () => {
-        const sorted = [...activeStudents].sort((a,b) => b.totalScore - a.totalScore);
-        const top3 = sorted.slice(0, 3).map(s => s.nickname || s.name);
-        const newHistory = [{ id: Date.now(), date: new Date().toLocaleDateString(), top3 }, ...historyData];
-        syncToFirebaseAndLocal(students, newHistory, null); setShowSettleConfirm(false);
-      };
-// --- 學生平板端獨立控制台 UI 渲染 ---
-      const renderStudentDashboard = () => {
-        const currentStudent = students.find(s => s.id === studentConfig.studentId);
-        if (!currentStudent) {
-          return (
-            <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-              <div className="bg-slate-800 p-6 rounded-xl border border-red-500 max-w-md w-full text-center">
-                <IconProxy name="ALE" className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                <h2 className="text-xl font-bold text-white mb-2">找不到學生資料</h2>
-                <p className="text-slate-400">請確認 QR Code 的座號參數是否正確，或聯繫老師重新生成。</p>
-              </div>
-            </div>
-          );
+            updateUIFromState();
         }
 
-        return (
-          <div className="min-h-screen bg-slate-950 text-slate-100 p-4 pb-12">
-            <div className="max-w-md mx-auto bg-slate-900 border border-emerald-500/30 rounded-2xl p-4 shadow-xl mb-6">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                  <span className="text-sm font-mono text-emerald-400 tracking-wider">SECURE CONNECTION</span>
-                </div>
-                <div className="flex items-center gap-1 text-slate-400 text-xs bg-slate-950 px-2 py-1 rounded">
-                  <IconProxy name="LOC" className="w-3 h-3 text-emerald-400" />
-                  <span>防竄改安全鎖已啟動</span>
-                </div>
-              </div>
+        function updateUIFromState() {
+            checkAndRepairData();
+            updateTerritoriesCount(); autoSpawnEntities(); 
+            renderInputs(); renderMap(); renderTeamSelectors(); updateTerritoryProgress();
+            renderChart([]); renderActionReport([]); renderSettings();
+            const countDisplay = document.getElementById('calc-count-display');
+            if(countDisplay) countDisplay.innerText = `結算次數：${calcCount}`;
+        }
 
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className={`w-16 h-16 rounded-xl overflow-hidden bg-slate-800 border-2 border-slate-700 ${getAuraClass(currentStudent.aura)}`}>
-                    {currentStudent.avatar ? (
-                      <img src={currentStudent.avatar} alt="avatar" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-500"><IconProxy name="USE" className="w-8 h-8" /></div>
-                    )}
-                  </div>
-                  {currentStudent.effect && (
-                    <div className="absolute -inset-1 border-2 border-cyan-400 rounded-xl animate-ping opacity-30 pointer-events-none"></div>
-                  )}
-                </div>
+        initFirebaseAndStart();
 
-                <div>
-                  <div className="flex items-center gap-2">
-                    {currentStudent.prefixTitle && (
-                      <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 text-xs font-bold px-1.5 py-0.5 rounded shadow">
-                        {currentStudent.prefixTitle}
-                      </span>
-                    )}
-                    <h1 className="text-xl font-bold text-white">{currentStudent.nickname || currentStudent.name}</h1>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">座號：{currentStudent.id} 號 | 房間：{studentConfig.room}</p>
-                </div>
-              </div>
+        // === 標籤頁切換 ===
+        function switchTab(tabId) {
+            playSound('click'); 
+            ['calc', 'map', 'honor', 'settings'].forEach(id => {
+                document.getElementById(`view-${id}`).classList.add('hidden');
+                document.getElementById(`view-${id}`).classList.remove(id==='calc'?'grid':'flex');
+                document.getElementById(`tab-${id}`).className = "btn-3d px-4 md:px-6 py-2 md:py-3 rounded-xl bg-gradient-to-b from-gray-600 to-gray-800 text-gray-300 font-black border-2 border-gray-500 transition-all text-xs md:text-base shadow-lg";
+            });
 
-              <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-                <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
-                  <div className="text-xs text-slate-500">認真點數</div>
-                  <div className="text-lg font-bold text-blue-400 font-mono">{currentStudent.study} <span className="text-xs text-slate-500">★</span></div>
-                </div>
-                <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
-                  <div className="text-xs text-slate-500">Keep點數</div>
-                  <div className="text-lg font-bold text-emerald-400 font-mono">{currentStudent.keep} <span className="text-xs text-slate-500">★</span></div>
-                </div>
-                <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
-                  <div className="text-xs text-slate-500">當前積分</div>
-                  <div className="text-lg font-bold text-amber-400 font-mono">{currentStudent.study + currentStudent.keep} <span className="text-xs text-slate-500">pts</span></div>
-                </div>
-              </div>
-            </div>
+            document.getElementById(`view-${tabId}`).classList.remove('hidden');
+            if (tabId === 'calc') {
+                document.getElementById('view-calc').classList.add('grid');
+                document.getElementById(`tab-${tabId}`).className = "btn-3d px-4 md:px-6 py-2 md:py-3 rounded-xl bg-gradient-to-b from-blue-500 to-blue-700 text-white font-black border-2 border-blue-400 transition-all text-sm md:text-lg shadow-lg";
+                renderInputs();
+            } else if (tabId === 'map') {
+                document.getElementById('view-map').classList.add('flex');
+                document.getElementById(`tab-${tabId}`).className = "btn-3d px-4 md:px-6 py-2 md:py-3 rounded-xl bg-gradient-to-b from-green-500 to-green-700 text-white font-black border-2 border-green-400 transition-all text-sm md:text-lg shadow-lg";
+                checkAndRepairData();
+                renderMap(); renderTeamSelectors();
+            } else if (tabId === 'honor') {
+                document.getElementById('view-honor').classList.add('flex');
+                document.getElementById(`tab-${tabId}`).className = "btn-3d px-4 md:px-6 py-2 md:py-3 rounded-xl bg-gradient-to-b from-yellow-500 to-yellow-700 text-white font-black border-2 border-yellow-400 transition-all text-sm md:text-lg shadow-lg";
+                updateHonorView();
+            } else if (tabId === 'settings') {
+                document.getElementById('view-settings').classList.add('flex');
+                document.getElementById(`tab-${tabId}`).className = "btn-3d px-4 md:px-6 py-2 md:py-3 rounded-xl bg-gradient-to-b from-gray-400 to-gray-600 text-white font-black border-2 border-gray-300 transition-all text-sm md:text-lg shadow-lg";
+                renderSettings();
+            }
+        }
+        window.switchTab = switchTab;
 
-            <div className="max-w-md mx-auto">
-              <div className="flex gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 mb-4">
-                <button onClick={() => setActiveTab('avatar')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'avatar' ? 'bg-slate-800 text-cyan-400 shadow' : 'text-slate-400 hover:text-white'}`}>外觀設定</button>
-                <button onClick={() => setActiveTab('titles')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'titles' ? 'bg-slate-800 text-cyan-400 shadow' : 'text-slate-400 hover:text-white'}`}>稱號解鎖</button>
-                <button onClick={() => setActiveTab('dice')} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'dice' ? 'bg-slate-800 text-cyan-400 shadow' : 'text-slate-400 hover:text-white'}`}>命運投擲</button>
-              </div>
+        // === 陣營管理與互換 ===
+        function updateTeamName(id, inputEl) {
+            saveHistory(); const team = getTeam(id);
+            if(team) { team.name = inputEl.value || `預設陣營`; saveGame(); updateUIFromState(); }
+        }
+        window.updateTeamName = updateTeamName;
 
-              {activeTab === 'avatar' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4 shadow-xl">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">自訂角色暱稱</label>
-                    <div className="flex gap-2">
-                      <input type="text" maxLength={8} value={inputNickname} onChange={(e) => setInputNickname(e.target.value)} placeholder="請輸入新暱稱..." className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500" />
-                      <button onClick={() => handleStudentSelfUpdate(currentStudent.id, { nickname: inputNickname })} className="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold px-4 py-2 rounded-xl text-sm transition-all">更新</button>
+        const iconOptions = [
+            { class: 'fa-user-ninja', label: '忍者' }, { class: 'fa-microphone-lines', label: '麥克風' },
+            { class: 'fa-robot', label: '機器人' }, { class: 'fa-basketball', label: '籃球' },
+            { class: 'fa-gamepad', label: '手把' }, { class: 'fa-dragon', label: '飛龍' },
+            { class: 'fa-crown', label: '皇冠' }, { class: 'fa-ghost', label: '幽靈' },
+            { class: 'fa-skull', label: '骷髏' }, { class: 'fa-fire', label: '火焰' },
+            { class: 'fa-droplet', label: '水滴' }, { class: 'fa-bolt', label: '閃電' },
+            { class: 'fa-leaf', label: '樹葉' }, { class: 'fa-cat', label: '貓咪' },
+            { class: 'fa-dog', label: '狗狗' }, { class: 'fa-rocket', label: '火箭' },
+            { class: 'fa-hat-wizard', label: '魔法帽' }, { class: 'fa-khanda', label: '雙劍' },
+            { class: 'fa-shield-halved', label: '盾牌' }, { class: 'fa-star', label: '星星' },
+            { class: 'fa-moon', label: '月亮' }, { class: 'fa-sun', label: '太陽' }
+        ];
+
+        function updateTeamIcon(id, selectEl) {
+            saveHistory(); const team = getTeam(id);
+            if(team) { team.icon = selectEl.value; saveGame(); updateUIFromState(); }
+        }
+        window.updateTeamIcon = updateTeamIcon;
+
+        function renderSettings() {
+            const container = document.getElementById('settings-teams'); if (!container) return; container.innerHTML = '';
+            teams.forEach(t => {
+                container.innerHTML += `
+                    <div class="flex items-center justify-between bg-gray-800 p-3 rounded-xl border-l-4" style="border-color:${t.hexBg}">
+                        <span class="${t.color} font-bold w-12 text-center"><i class="fa-solid ${t.icon} text-xl"></i></span>
+                        <select onchange="updateTeamIcon('${t.id}', this)" class="bg-gray-900 border border-gray-600 text-gray-300 rounded-lg p-2 ml-1 text-sm outline-none focus:border-blue-500 transition">
+                            ${iconOptions.map(opt => `<option value="${opt.class}" ${t.icon === opt.class ? 'selected' : ''}>${opt.label}</option>`).join('')}
+                        </select>
+                        <input type="text" value="${t.name}" onchange="updateTeamName('${t.id}', this)" class="bg-gray-900 border border-gray-600 text-white rounded-lg p-2 flex-grow ml-2 font-bold text-center focus:border-blue-500 outline-none transition" placeholder="陣營名稱">
                     </div>
-                  </div>
+                `;
+            });
+            
+            const selectA = document.getElementById('swap-team-a'); const selectB = document.getElementById('swap-team-b');
+            let options = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            if(selectA) selectA.innerHTML = options;
+            if(selectB) { selectB.innerHTML = options; if(teams.length > 1) selectB.selectedIndex = 1; }
+        }
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-2">解鎖個人專屬光環 (Aura)</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { id: '', label: '🚫 無光環特效' }, { id: 'fire', label: '🔥 烈焰圍繞' }, { id: 'y2k', label: '💖 粉紅霓虹' },
-                        { id: 'soft', label: '✨ 聖潔柔光' }, { id: 'electric', label: '⚡ 閃電超頻' }, { id: 'vintage', label: '🎞️ 復古濾鏡' }, { id: 'shadow', label: '👁️ 暗影潛影' }
-                      ].map(item => (
-                        <button key={item.id} onClick={() => handleStudentSelfUpdate(currentStudent.id, { aura: item.id })} className={`p-3 text-left rounded-xl border text-xs transition-all ${currentStudent.aura === item.id ? 'bg-cyan-950/40 border-cyan-500 text-cyan-300' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'}`}>{item.label}</button>
-                      ))}
-                    </div>
-                  </div>
+        function executeSwap() {
+            playSound('click'); const idA = document.getElementById('swap-team-a').value; const idB = document.getElementById('swap-team-b').value;
+            if (idA === idB) { triggerEventModal("錯誤", "無法與同一個陣營互換！"); return; }
+            saveHistory();
+            checkAndRepairData();
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-2">裝備動態粒子特效 (Effects)</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { id: '', label: '🚫 無動態粒子' }, { id: 'neon', label: '🪐 脈衝星軌' }, { id: 'gold', label: '🪙 黃金碎屑' }, { id: 'magic', label: '🔮 奧術魔法' }
-                      ].map(item => (
-                        <button key={item.id} onClick={() => handleStudentSelfUpdate(currentStudent.id, { effect: item.id })} className={`p-3 text-left rounded-xl border text-xs transition-all ${currentStudent.effect === item.id ? 'bg-cyan-950/40 border-cyan-500 text-cyan-300' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'}`}>{item.label}</button>
-                      ))}
-                    </div>
-                  </div>
+            mapData.forEach(row => row.forEach(hex => { if (hex.owner === idA) hex.owner = 'TEMP'; }));
+            mapData.forEach(row => row.forEach(hex => { if (hex.owner === idB) hex.owner = idA; }));
+            mapData.forEach(row => row.forEach(hex => { if (hex.owner === 'TEMP') hex.owner = idB; }));
 
-                  <div className="border-t border-slate-800 pt-4">
-                    <label className="block text-xs font-medium text-slate-400 mb-1">召喚 AI 戰鬥頭像變身</label>
-                    <div className="flex gap-2">
-                      <input type="text" placeholder="例如: mecha, cat ears, dragon warrior..." value={avatarClassTag} onChange={(e) => setAvatarClassTag(e.target.value)} className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500" />
-                      <button disabled={isGenerating} onClick={() => triggerGenerateAvatar(currentStudent.id)} className="bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 text-white font-medium px-3 py-2 rounded-xl text-sm transition-all flex items-center gap-1">
-                        <IconProxy name="WAN" className="w-4 h-4" /> {isGenerating ? "繪製中..." : "生成"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+            const tA = getTeam(idA); const tB = getTeam(idB);
+            const propsToSwap = ['name', 'lastScore', 'currentScore', 'progress', 'moves', 'territories', 'nextPeriodModifier', 'tempInput', 'lastDiff', 'bossKills', 'totalMovesGained', 'chestsOpened', 'icon'];
+            propsToSwap.forEach(prop => { let temp = tA[prop]; tA[prop] = tB[prop]; tB[prop] = temp; });
 
-              {activeTab === 'titles' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
-                  <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
-                    <IconProxy name="TRO" className="w-3 h-3 text-amber-400" /> <span>依據課堂真實表現自動解鎖：</span>
-                  </div>
-                  {TITLE_CONDITIONS.map(item => {
-                    const isUnlocked = !!currentStudent[item.key];
-                    const isEquipped = currentStudent.prefixTitle === item.title;
-                    return (
-                      <div key={item.title} className={`flex items-center justify-between p-3 rounded-xl border text-sm transition-all ${isUnlocked ? 'bg-slate-950 border-slate-800' : 'bg-slate-950/40 border-slate-900 opacity-60'}`}>
-                        <div>
-                          <div className={`font-bold ${isUnlocked ? 'text-amber-400' : 'text-slate-500'}`}>{item.title}</div>
-                          <div className="text-xs text-slate-500 mt-0.5">解鎖條件：{item.condition}</div>
+            saveGame(); updateUIFromState();
+            addLog(`導師執行了 ${tA.name} 與 ${tB.name} 的資料互換`);
+            triggerEventModal("🔄 陣營互換成功", `${tB.name} 與 ${tA.name} 的領地、名稱與專屬圖示已完美互換！`);
+        }
+        window.executeSwap = executeSwap;
+
+        function adjustAP(teamId, delta) { 
+            saveHistory(); playSound('click'); const team = getTeam(teamId); 
+            team.moves = Math.max(0, team.moves + delta); 
+            addLog(`導師手動調整 ${team.name} 行動力 ${delta>0?'+':''}${delta}`);
+            renderTeamSelectors(); updateValidTargets(); saveGame(); 
+        }
+        window.adjustAP = adjustAP;
+
+        // === 弱勢結盟配給 ===
+        function triggerAlliance() {
+            saveHistory(); playSound('mystery');
+            let sortedTeams = [...teams].sort((a, b) => a.territories - b.territories);
+            let t1 = sortedTeams[0]; let t2 = sortedTeams[1];
+            
+            currentAlliance = [t1.id, t2.id];
+            t1.moves += 2; t2.moves += 2; t1.nextPeriodModifier += 10; t2.nextPeriodModifier += 10;
+            
+            addLog(`${t1.name} 與 ${t2.name} 簽署互助同盟`);
+            updateUIFromState(); saveGame();
+            triggerEventModal("🤝 弱勢結盟", `【${t1.name}】與【${t2.name}】感受到生存危機，決定簽署互助與互不侵犯條約！\n\n1. 雙方各獲得 行動力 +2、下期積分預存 +10\n2. 雙方進入「結盟狀態」，地圖上無法互相佔領對方的領地（直到下次重新結盟）！`);
+        }
+        window.triggerAlliance = triggerAlliance;
+
+        // === 戰力結算系統 ===
+        function renderInputs() {
+            const container = document.getElementById('input-container'); container.innerHTML = '';
+            teams.forEach(team => {
+                let modifierBadge = '';
+                if (team.nextPeriodModifier > 0) modifierBadge = `<span class="ml-2 text-[10px] bg-green-500/20 text-green-400 border border-green-500 px-2 py-1 rounded-full">事件 +${team.nextPeriodModifier}分</span>`;
+                else if (team.nextPeriodModifier < 0) modifierBadge = `<span class="ml-2 text-[10px] bg-red-500/20 text-red-400 border border-red-500 px-2 py-1 rounded-full">事件 ${team.nextPeriodModifier}分</span>`;
+                
+                container.innerHTML += `
+                    <div class="bg-gray-800/80 p-4 rounded-xl border-l-4 mb-4 shadow-md" style="border-color: ${team.hexBg};">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-bold text-lg flex items-center ${team.color}">
+                                <i class="fa-solid ${team.icon} w-6 mr-2 text-center"></i> ${team.name}
+                            </span>
+                            <span class="text-sm bg-gray-700 px-3 py-1 rounded text-gray-300 font-bold shadow-inner">
+                                領地: ${team.territories} ${modifierBadge}
+                            </span>
                         </div>
-                        {isUnlocked ? (
-                          <button onClick={() => {
-                            const curTitle = currentStudent.prefixTitle === item.title ? '' : item.title;
-                            handleStudentSelfUpdate(currentStudent.id, { prefixTitle: curTitle });
-                          }} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isEquipped ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{isEquipped ? '裝備中' : '裝備'}</button>
-                        ) : (
-                          <div className="text-xs text-slate-600 flex items-center gap-1"><IconProxy name="LOC" className="w-3 h-3" /> 未解鎖</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {activeTab === 'dice' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center shadow-xl">
-                  <h3 className="text-sm font-bold text-slate-300 mb-2">向系統大魔王挑戰命運之骰</h3>
-                  <p className="text-xs text-slate-500 mb-4">每輪結算前可挑戰一次。點擊按鈕後，大螢幕將與平板同步開獎！</p>
-                  {currentStudent.dicePlayed ? (
-                    <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
-                      <div className="text-xs text-slate-400 mb-2">本輪挑戰結果</div>
-                      {diceState && diceState.studentId === currentStudent.id ? (
-                        <div className="space-y-3">
-                          <div className="flex justify-center gap-6 items-center">
-                            <div>
-                              <div className="text-xs text-blue-400 mb-1">你投出</div>
-                              <div className="text-2xl font-mono font-bold text-white bg-blue-950/60 border border-blue-900 px-3 py-1 rounded-lg">{diceState.s1 + diceState.s2}</div>
+                        <div class="grid grid-cols-2 gap-4 mt-2">
+                            <div class="bg-gray-900/50 p-2 rounded-lg border border-gray-700">
+                                <label class="block text-[10px] text-gray-400 mb-1 tracking-wider uppercase">上期總戰力 <span class="text-blue-400">(解鎖)</span></label>
+                                <input type="number" id="last-${team.id}" value="${team.lastScore}" onchange="updateInputData()" class="w-full bg-transparent border-b-2 border-gray-600 focus:border-blue-400 text-gray-300 font-bold text-center outline-none transition-all pb-1 text-lg">
                             </div>
-                            <div className="text-slate-600 font-bold">VS</div>
-                            <div>
-                              <div className="text-xs text-red-400 mb-1">魔王投出</div>
-                              <div className="text-2xl font-mono font-bold text-white bg-red-950/60 border border-red-900 px-3 py-1 rounded-lg">{diceState.sys1 + diceState.sys2}</div>
+                            <div class="bg-gray-900/50 p-2 rounded-lg border border-yellow-600/50 relative overflow-hidden">
+                                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-400 to-orange-500"></div>
+                                <label class="block text-[10px] text-yellow-500 mb-1 tracking-wider uppercase font-bold">本期新戰力</label>
+                                <input type="number" id="curr-${team.id}" value="${team.tempInput}" onchange="updateInputData()" placeholder="輸入分數..." class="w-full bg-transparent border-b-2 border-yellow-500/50 focus:border-yellow-400 text-white font-black text-center outline-none transition-all pb-1 text-xl">
                             </div>
-                          </div>
-                          <div className={`text-base font-bold ${diceState.won ? 'text-emerald-400 animate-bounce' : 'text-slate-500'}`}>{diceState.won ? "🎉 挑戰成功！" : "☠️ 挑戰失敗，下輪再試！"}</div>
                         </div>
-                      ) : (
-                        <div className="text-sm text-slate-400">你已在本輪完成了擲骰，請查看大螢幕結果！</div>
-                      )}
                     </div>
-                  ) : (
-                    <button onClick={() => handleRollDice(currentStudent.id)} className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition-all flex items-center gap-2 mx-auto">
-                      <IconProxy name="DIC" className="w-5 h-5" /> 啟動命運投擲
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+                `;
+            });
+        }
 
-            {toastMsg && <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 border border-cyan-500 text-cyan-300 px-4 py-2.5 rounded-xl text-xs shadow-2xl font-medium animate-fade-in-up">{toastMsg}</div>}
-          </div>
-        );
-      };
+        function calculateResults() {
+            saveHistory(); playSound('calc');
+            let results = []; let maxTotalScore = -Infinity; let maxImprovement = -Infinity;
 
-      // --- 大螢幕單個學生卡片元件 ---
-      const renderStudentCard = (st) => {
-        const isSelected = selectedId === st.id;
-        const isBatchSelected = batchSelection.includes(st.id);
-        const total = st.study + st.keep;
+            teams.forEach(team => {
+                const lastInput = document.getElementById(`last-${team.id}`).value; const currInput = document.getElementById(`curr-${team.id}`).value;
+                team.lastScore = parseFloat(lastInput) || 0; const newScore = parseFloat(currInput) || team.lastScore;
+                team.tempDiff = newScore - team.lastScore; team.tempUpkeep = team.territories * 5; 
+                team.tempNet = team.tempDiff - team.tempUpkeep + team.nextPeriodModifier; team.tempNewScore = newScore;
+                
+                if (newScore > maxTotalScore) maxTotalScore = newScore;
+                team.tempImprovement = team.tempDiff - (team.lastDiff || 0);
+                if (calcCount > 0 && team.tempImprovement > maxImprovement) maxImprovement = team.tempImprovement;
+            });
 
-        return (
-          <div 
-            key={st.id}
-            onClick={() => {
-              if (isBatchMode) { toggleBatchSelection(st.id); } 
-              else { setSelectedId(st.id); setAvatarSelectedId(st.id); }
-            }}
-            className={`relative group rounded-xl p-3 border transition-all cursor-pointer select-none overflow-hidden
-              ${isBatchMode 
-                ? (isBatchSelected ? 'bg-slate-800 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700')
-                : (isSelected ? 'bg-slate-800 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)] scale-[1.02]' : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700')
-              }
-            `}
-          >
-            {st.effect === 'neon' && <div className="absolute -inset-1 border border-cyan-500/20 rounded-xl animate-pulse pointer-events-none"></div>}
-            {st.effect === 'gold' && <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-yellow-400 to-transparent animate-pulse"></div>}
-            {st.effect === 'magic' && <div className="absolute -inset-2 bg-purple-500/5 rounded-xl animate-ping pointer-events-none"></div>}
+            let firstPlaceTeams = teams.filter(t => t.tempNewScore === maxTotalScore && maxTotalScore > 0);
+            let mostImprovedTeams = calcCount > 0 ? teams.filter(t => t.tempImprovement === maxImprovement && maxImprovement > 0) : [];
 
-            <div className="flex items-start gap-2.5">
-              <div className="relative flex-shrink-0">
-                <div className={`w-12 h-12 rounded-lg overflow-hidden bg-slate-800 border border-slate-700/80 transition-all ${getAuraClass(st.aura)}`}>
-                  {st.avatar ? ( <img src={st.avatar} alt="a" className="w-full h-full object-cover" /> ) : ( <div className="w-full h-full flex items-center justify-center text-slate-600"><IconProxy name="USE" className="w-6 h-6" /></div> )}
-                </div>
-                <div className="absolute -bottom-1 -right-1 bg-slate-950 text-slate-400 border border-slate-800 text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-mono font-bold">{st.id}</div>
-              </div>
+            teams.forEach(team => {
+                let gainedMoves = 0; let moveReasons = [];
+                if (team.tempNet >= 300) { gainedMoves += 2; moveReasons.push("淨分達300(+2)"); } 
+                else if (team.tempNet >= 100) { gainedMoves += 1; moveReasons.push("淨分達100(+1)"); }
+                if (firstPlaceTeams.includes(team)) { gainedMoves += 1; moveReasons.push("當期第一(+1)"); }
+                let isMostImproved = false;
+                if (mostImprovedTeams.includes(team)) { gainedMoves += 1; moveReasons.push("進步最多(+1)"); isMostImproved = true; }
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1 flex-wrap">
-                  {st.prefixTitle && <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 text-[9px] font-black px-1 py-0.2 rounded shadow-sm scale-90 origin-left">{st.prefixTitle}</span>}
-                  <span className="font-bold text-white text-sm truncate">{st.nickname || st.name}</span>
-                </div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <div className="flex items-center gap-0.5 text-blue-400 font-mono text-xs font-bold"><span>{st.study}</span><span className="text-[10px] text-slate-600">★</span></div>
-                  <div className="text-slate-700 text-xs">|</div>
-                  <div className="flex items-center gap-0.5 text-emerald-400 font-mono text-xs font-bold"><span>{st.keep}</span><span className="text-[10px] text-slate-600">★</span></div>
-                  <div className="text-slate-700 text-xs">|</div>
-                  <div className="text-amber-400 font-mono text-xs font-black bg-amber-950/40 border border-amber-900/30 px-1 rounded">{total}<span className="text-[9px] font-normal text-amber-600 ml-0.5">p</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      };
+                team.moves += gainedMoves;
+                team.totalMovesGained = (team.totalMovesGained || 0) + gainedMoves;
 
-      // --- 大螢幕階級區塊元件 ---
-      const renderTierSection = (title, icon, reqScore, tierTag, style) => {
-        const list = activeStudents.filter(s => s.tier === tierTag);
-        return (
-          <div className="mb-6" key={tierTag}>
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{icon}</span>
-                <h3 className={`text-base font-black tracking-wider ${style.textColor}`}>{title}</h3>
-                <span className="text-xs text-slate-500 font-mono">({list.length}人)</span>
-              </div>
-              <div className="text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded-full border border-slate-800/60">晉級標準 ≥ {reqScore} 分</div>
-            </div>
-            {list.length === 0 ? (
-              <div className="text-center py-6 border border-dashed border-slate-900 rounded-xl text-xs text-slate-600 font-mono">NO CHAMPIONS IN THIS TIER YET</div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                {list.map(s => renderStudentCard(s))}
-              </div>
-            )}
-          </div>
-        );
-      };
+                results.push({ team: team, diff: team.tempDiff, upkeep: team.tempUpkeep, bonus: team.nextPeriodModifier, net: team.tempNet, moves: gainedMoves, reasons: moveReasons.length > 0 ? moveReasons.join(', ') : '無符合條件', isMostImproved: isMostImproved });
 
-      if (isStudentMode) { return renderStudentDashboard(); }
+                team.lastDiff = team.tempDiff; team.lastScore = team.tempNewScore; team.tempInput = ''; team.nextPeriodModifier = 0; 
+            });
 
-      return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
-          {achievementQueue.length > 0 && (
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-amber-600 via-orange-500 to-yellow-500 p-0.5 rounded-2xl shadow-[0_0_30px_rgba(245,158,11,0.5)] animate-bounce w-96">
-              <div className="bg-slate-950 p-4 rounded-2xl text-center">
-                <IconProxy name="TRO" className="w-8 h-8 text-yellow-400 mx-auto mb-1" />
-                <div className="text-xs font-mono text-amber-400 uppercase tracking-widest font-bold">ACHIEVEMENT UNLOCKED</div>
-                <div className="text-lg font-black text-white mt-1">{achievementQueue[0].studentName}</div>
-                <div className="text-sm font-bold text-yellow-300 mt-0.5">成功解鎖榮譽稱號 {achievementQueue[0].title}</div>
-              </div>
-            </div>
-          )}
+            calcCount++; document.getElementById('calc-count-display').innerText = `結算次數：${calcCount}`;
+            addLog(`第 ${calcCount} 期 戰鬥結算完畢`);
+            renderChart(results); renderActionReport(results); renderInputs(); saveGame();
+            triggerEventModal("結算完成！", "已依照全新規則配發行動力。\n請前往【世界地圖】進行佔領！", () => { switchTab('map'); });
+        }
+        window.calculateResults = calculateResults;
 
-          <header className="no-print bg-slate-900/90 border-b border-slate-800 px-6 py-3 flex items-center justify-between backdrop-blur-md z-30 shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-lg shadow-orange-950/40"><IconProxy name="CRO" className="w-5 h-5 text-slate-950 font-black" /></div>
-              <div>
-                <h1 className="text-lg font-black tracking-wider bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">星之競技場 <span className="text-xs text-cyan-400 font-mono px-1.5 py-0.5 bg-slate-950 border border-slate-800 rounded ml-1">v4.0 斷網防封鎖版</span></h1>
-                <p className="text-[10px] text-slate-500 mt-0.5">跨平台互動課堂排位與防竄改安全控制中心</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${isFirebaseConnected ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400' : 'bg-red-950/40 border-red-500/30 text-red-400'}`}>
-                <div className={`w-2 h-2 rounded-full ${isFirebaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}></div>
-                <span>{isFirebaseConnected ? "雲端同步通道運作中" : "未連接 Firebase"}</span>
-              </div>
-              <button onClick={() => setShowQrWall(true)} className="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all"><IconProxy name="QRC" className="w-4 h-4" /> 平板連線 QR 卡</button>
-            </div>
-          </header>
+        function renderChart(results) {
+            const container = document.getElementById('chart-container'); if(results.length === 0) return; container.innerHTML = '';
+            let maxNet = Math.max(...results.map(r => Math.max(r.net, 0)), 10);
+            results.sort((a, b) => b.net - a.net).forEach((res, idx) => {
+                const diffColor = res.diff >= 0 ? 'text-green-400' : 'text-red-400';
+                const diffSign = res.diff >= 0 ? '▲' : '▼';
+                const netColor = res.net >= 0 ? 'text-green-400' : 'text-red-400';
+                const netSign = res.net > 0 ? '+' : '';
+                
+                let rankColor = 'text-gray-500'; let rankBg = 'bg-gray-800';
+                if(idx === 0) { rankColor = 'text-yellow-900'; rankBg = 'bg-gradient-to-br from-yellow-300 to-yellow-500'; }
+                else if(idx === 1) { rankColor = 'text-gray-900'; rankBg = 'bg-gradient-to-br from-gray-300 to-gray-400'; }
+                else if(idx === 2) { rankColor = 'text-amber-900'; rankBg = 'bg-gradient-to-br from-amber-600 to-amber-700'; }
 
-          <div className="no-print flex-1 flex overflow-hidden">
-            <main className="flex-1 p-6 overflow-y-auto custom-scrollbar space-y-6">
-              {renderTierSection('大明星 (Tier S)', '🎵🎤', 14, 'S', { textColor: 'text-yellow-400' })}
-              {renderTierSection('關鍵戰將 (Tier A)', '🏀⛹️‍♂️', 10, 'A', { textColor: 'text-cyan-400' })}
-              {renderTierSection('職業選手 (Tier B)', '⚔️✨', 6, 'B', { textColor: 'text-emerald-400' })}
-              {renderTierSection('業餘玩家 (Tier C)', '🎮👾', 1, 'C', { textColor: 'text-slate-300' })}
-              {renderTierSection('初學新手 (Tier D)', '🐣💤', 0, 'D', { textColor: 'text-slate-500' })}
-            </main>
-
-            <aside className="w-80 bg-slate-900/50 border-l border-slate-800/80 p-4 overflow-y-auto custom-scrollbar flex flex-col gap-4 shrink-0">
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
-                <div className="text-xs font-bold text-slate-400 flex items-center gap-1"><IconProxy name="KEY" className="w-3 h-3 text-cyan-400" /> 系統同步與金鑰密碼</div>
-                <input type="password" placeholder="請貼上 Firebase Config JSON..." value={firebaseConfigInput} onChange={(e) => { setFirebaseConfigInput(e.target.value); localStorage.setItem('starArena_fbConfig', e.target.value); }} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-[10px] text-slate-300 font-mono focus:outline-none" />
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="text" placeholder="房間代碼" value={fbRoomId} onChange={(e) => { setFbRoomId(e.target.value); localStorage.setItem('starArena_fbRoomId', e.target.value); }} className="bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-white font-mono" />
-                  <input type="password" placeholder="安全密碼" value={adminPassword} onChange={(e) => { setAdminPassword(e.target.value); localStorage.setItem('starArena_adminPassword', e.target.value); }} className="bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-white font-mono" />
-                </div>
-              </div>
-
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
-                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                  <h4 className="text-xs font-bold text-cyan-400 tracking-wider">點數調整中控台</h4>
-                  <label className="flex items-center gap-1 text-[11px] text-slate-400 cursor-pointer">
-                    <input type="checkbox" checked={isBatchMode} onChange={(e) => { setIsBatchMode(e.target.checked); setBatchSelection([]); }} className="rounded border-slate-800 bg-slate-900 text-cyan-500 focus:ring-0 w-3 h-3" />
-                    <span>開啟多選批次模式</span>
-                  </label>
-                </div>
-
-                {isBatchMode ? (
-                  <div className="space-y-3">
-                    <div className="text-[11px] text-slate-500 bg-slate-900/60 p-2 rounded border border-slate-800/40">💡 請在大螢幕點擊卡片，已選中 <span className="text-cyan-400 font-bold">{batchSelection.length}</span> 人</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input type="number" placeholder="認真加減值" value={batchStudyDelta} onChange={(e)=>setBatchStudyDelta(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white" />
-                      <input type="number" placeholder="Keep加減值" value={batchKeepDelta} onChange={(e)=>setBatchKeepDelta(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white" />
-                    </div>
-                    <button onClick={handleBatchSubmit} disabled={batchSelection.length === 0} className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-slate-950 font-bold py-2 rounded-xl text-xs transition-all">確 定 批 次 套 用</button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <select value={selectedId} onChange={(e) => setSelectedId(parseInt(e.target.value))} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white font-mono">
-                      {students.map(s => <option key={s.id} value={s.id}>{s.id}號 - {s.nickname || s.name}</option>)}
-                    </select>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">認真點數</label>
-                        <input type="number" value={studyScore} onChange={(e) => setStudyScore(parseInt(e.target.value)||0)} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-sm text-center text-blue-400 font-mono font-bold" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">Keep點數</label>
-                        <input type="number" value={keepScore} onChange={(e) => setKeepScore(parseInt(e.target.value)||0)} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-sm text-center text-emerald-400 font-mono font-bold" />
-                      </div>
-                    </div>
-                    <button onClick={handleSingleScoreUpdate} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl text-xs transition-all">修 改 單 人 點 數</button>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
-                <h4 className="text-xs font-bold text-purple-400 tracking-wider mb-2 border-b border-slate-800 pb-1">競技殿堂功能控制</h4>
-                <button onClick={handleGenerateTeams} className="w-full bg-gradient-to-r from-red-950 to-blue-950 border border-slate-800 text-slate-200 py-2 rounded-xl text-xs font-bold hover:border-slate-700 transition-all flex items-center justify-center gap-1.5"><IconProxy name="SWO" className="w-4 h-4 text-orange-400" /> 智能平衡紅藍戰隊</button>
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                  <button onClick={() => setShowResetConfirm(true)} className="bg-slate-900 border border-slate-800 text-red-400 font-medium py-2 rounded-lg text-xs hover:bg-red-950/20 transition-all">重置平日分數</button>
-                  <button onClick={() => setShowSettleConfirm(true)} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-black py-2 rounded-lg text-xs shadow">登錄歷史殿堂</button>
-                </div>
-              </div>
-            </aside>
-          </div>
-
-          {showQrWall && (
-            <div className="fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4 overflow-y-auto custom-scrollbar">
-              <div className="bg-slate-900 border border-slate-800 w-full max-w-5xl rounded-2xl p-6 shadow-2xl relative flex flex-col max-h-[90vh]">
-                <button onClick={() => setShowQrWall(false)} className="no-print absolute top-4 right-4 text-slate-500 hover:text-white transition-all bg-slate-950 p-2 rounded-xl border border-slate-800"><IconProxy name="X" className="w-5 h-5" /></button>
-                <div className="no-print border-b border-slate-800 pb-4 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-black text-white flex items-center gap-2"><IconProxy name="QRC" className="w-6 h-6 text-cyan-400" /> 學生平板連線 QR Code 控制配對牆</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">學生掃描對應的 QR Code 後即可用平板直接變更外觀、解鎖稱號與光環。</p>
-                  </div>
-                  <button onClick={() => window.print()} className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-1.5 shrink-0"><IconProxy name="PRI" className="w-4 h-4" /> 批次列印全班 A4 配對卡</button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
-                  <div className="qr-print-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-2 bg-slate-950 rounded-xl border border-slate-900">
-                    {students.map(st => (
-                      <div key={st.id} className="print-container print-bg-fix bg-slate-900 border border-slate-800/80 p-4 rounded-xl flex flex-col items-center text-center justify-between shadow">
-                        <div>
-                          <div className="text-xs font-mono font-black text-cyan-400 uppercase tracking-wider bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800">SEAT {st.id}</div>
-                          <h3 className="text-sm font-bold text-white mt-1.5 truncate max-w-[150px]">{st.nickname || st.name}</h3>
+                container.innerHTML += `
+                    <div class="bg-gray-800/80 p-0 rounded-2xl border border-gray-700 relative overflow-hidden shadow-lg hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] transition-all mb-4 group flex flex-col">
+                        <div class="flex justify-between items-center bg-gray-900/60 p-3 border-b border-gray-700/50">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full ${rankBg} flex items-center justify-center font-black ${rankColor} shadow-md text-lg">${idx+1}</div>
+                                <span class="${res.team.color} font-black text-xl flex items-center"><i class="fa-solid ${res.team.icon} mr-2"></i>${res.team.name}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-[10px] text-gray-400 uppercase tracking-widest block">上期戰力</span>
+                                <span class="text-xl font-black text-gray-300 drop-shadow-md">${res.team.lastScore - res.diff} <i class="fa-solid fa-arrow-right text-sm text-gray-600 mx-1"></i> <span class="text-white">${res.team.lastScore}</span></span>
+                            </div>
                         </div>
-                        <div className="bg-slate-800 p-2 rounded-lg my-3 border border-slate-700 flex items-center justify-center">
-                          <div id={`qrcode-box-${st.id}`} className="p-1 bg-slate-800 rounded"></div>
+
+                        <div class="flex flex-wrap md:flex-nowrap p-3 gap-2 bg-gradient-to-r from-transparent to-gray-900/40">
+                            <div class="flex-1 bg-gray-900/50 p-2 rounded-xl border border-gray-700 flex flex-col items-center justify-center">
+                                <span class="text-gray-400 text-[10px] block tracking-wider mb-1"><i class="fa-solid fa-arrow-trend-up mr-1"></i>本期升降</span>
+                                <span class="${diffColor} text-lg font-bold">${diffSign} ${Math.abs(res.diff)}</span>
+                            </div>
+                            <div class="flex-1 bg-gray-900/50 p-2 rounded-xl border border-gray-700 flex flex-col items-center justify-center">
+                                <span class="text-gray-400 text-[10px] block tracking-wider mb-1"><i class="fa-solid fa-shield-halved mr-1"></i>領地維護</span>
+                                <span class="text-orange-400 text-lg font-bold">-${res.upkeep}</span>
+                            </div>
+                            <div class="flex-1 bg-gray-900/50 p-2 rounded-xl border border-gray-700 flex flex-col items-center justify-center">
+                                <span class="text-gray-400 text-[10px] block tracking-wider mb-1"><i class="fa-solid fa-bolt mr-1"></i>事件</span>
+                                <span class="${res.bonus >= 0 ? 'text-green-400' : 'text-red-400'} text-lg font-bold">${res.bonus >= 0 ? '+'+res.bonus : res.bonus}</span>
+                            </div>
+                            <div class="flex-[1.5] bg-gradient-to-br from-gray-800 to-gray-900 p-2 rounded-xl border-2 ${res.net >= 0 ? 'border-green-500/50' : 'border-red-500/50'} flex flex-col items-center justify-center shadow-inner">
+                                <span class="text-gray-300 text-xs block tracking-wider font-bold mb-1">結算淨分</span>
+                                <span class="${netColor} text-2xl font-black drop-shadow-[0_0_8px_currentColor]">${netSign}${res.net}</span>
+                            </div>
                         </div>
-                        <div className="text-[9px] text-slate-500 font-mono scale-90 tracking-tight">星之競技場 專屬控制密鑰</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+                        
+                        <div class="w-full h-1.5 bg-gray-900">
+                            <div class="h-full ${res.net >= 0 ? 'bg-green-500' : 'bg-red-500'} bar-transition" style="width: ${Math.max(2, (res.net / maxNet) * 100)}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
 
-          {showResetConfirm && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full text-center">
-                <IconProxy name="ALE" className="w-12 h-12 text-red-500 mx-auto mb-3" />
-                <h3 className="text-lg font-black text-white">確定重置平日點數？</h3>
-                <p className="text-xs text-slate-400 mt-1">這將會清空所有學生的認真與Keep點數。此操作無法復原。</p>
-                <div className="grid grid-cols-2 gap-3 mt-5">
-                  <button onClick={() => setShowResetConfirm(false)} className="bg-slate-800 text-slate-300 py-2 rounded-xl text-xs font-bold">取消</button>
-                  <button onClick={handleResetScores} className="bg-red-600 text-white py-2 rounded-xl text-xs font-bold">確定重置</button>
-                </div>
-              </div>
-            </div>
-          )}
+        function renderActionReport(results) {
+            const reportList = document.getElementById('action-report'); if(results.length === 0) return; reportList.innerHTML = '';
+            results.forEach(res => {
+                let badgeHtml = res.isMostImproved ? `<span class="ml-2 text-xs bg-yellow-500/20 text-yellow-300 border border-yellow-500 px-2 py-0.5 rounded-full badge-pulse"><i class="fa-solid fa-star mr-1"></i>最佳進步</span>` : '';
+                reportList.innerHTML += `
+                    <li class="flex items-center justify-between p-3 bg-gray-800/80 rounded-xl border border-gray-700 shadow-sm">
+                        <div class="flex items-center">
+                            <i class="fa-solid ${res.team.icon} ${res.team.color} w-8 text-xl text-center"></i>
+                            <div class="ml-2">
+                                <p class="text-white font-bold text-sm flex items-center">${res.team.name} ${badgeHtml}</p>
+                                <p class="text-xs text-gray-400 mt-1">(差額:${res.diff} | 🛡️維護:-${res.upkeep} | 事件:${res.bonus>0?'+'+res.bonus:res.bonus})</p>
+                                <p class="text-xs font-bold text-blue-300 mt-0.5 tracking-wide">${res.reasons}</p>
+                            </div>
+                        </div>
+                        <div class="text-right flex flex-col justify-center items-end"><span class="block text-xl font-black text-yellow-400 drop-shadow-md leading-none">+${res.moves} 行動</span></div>
+                    </li>
+                `;
+            });
+        }
 
-          {showSettleConfirm && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full text-center">
-                <IconProxy name="TRO" className="w-12 h-12 text-amber-400 mx-auto mb-3" />
-                <h3 className="text-lg font-black text-white">確認登錄歷史殿堂？</h3>
-                <p className="text-xs text-slate-400 mt-1">系統將擷取目前排位前三名的榮譽王者，永久登錄至戰報中。</p>
-                <div className="grid grid-cols-2 gap-3 mt-5">
-                  <button onClick={() => setShowSettleConfirm(false)} className="bg-slate-800 text-slate-300 py-2 rounded-xl text-xs font-bold">取消</button>
-                  <button onClick={handleSettleToHistory} className="bg-amber-500 text-slate-950 font-black py-2 rounded-xl text-xs">確認封王登錄</button>
-                </div>
-              </div>
-            </div>
-          )}
+        // === 地圖與動態生成系統 ===
+        function initMapData() {
+            mapData = [];
+            for (let r = 0; r < mapRows; r++) { let row = []; for (let c = 0; c < mapCols; c++) row.push({ owner: null, hasChest: false, hasBoss: false, hasMystery: false }); mapData.push(row); }
+            mapData[0][0].owner = 'team1'; mapData[0][mapCols-1].owner = 'team2'; mapData[mapRows-1][0].owner = 'team3';
+            mapData[mapRows-1][mapCols-1].owner = 'team4'; mapData[Math.floor(mapRows/2)][Math.floor(mapCols/2)].owner = 'team5';
+            updateTerritoriesCount(); autoSpawnEntities();
+        }
 
-          {toastMsg && <div className="no-print fixed bottom-4 left-6 bg-slate-900 border border-cyan-500 text-cyan-300 px-4 py-2.5 rounded-xl text-xs shadow-2xl font-medium animate-fade-in-up z-50">{toastMsg}</div>}
-        </div>
-      );
-    }
+        function loadHalfwayData() {
+            mapData = [];
+            for (let r = 0; r < mapRows; r++) { let row = []; for (let c = 0; c < mapCols; c++) row.push({ owner: null, hasChest: false, hasBoss: false, hasMystery: false }); mapData.push(row); }
+            
+            mapData[0][6].owner = 'team1'; mapData[0][7].owner = 'team1'; mapData[1][7].owner = 'team1'; mapData[2][7].owner = 'team1'; mapData[2][8].owner = 'team1'; mapData[4][8].owner = 'team1';
+            mapData[6][1].owner = 'team2'; mapData[6][2].owner = 'team2';
+            mapData[0][1].owner = 'team3'; mapData[0][2].owner = 'team3'; mapData[1][1].owner = 'team3'; mapData[2][2].owner = 'team3'; mapData[3][2].owner = 'team3';
+            mapData[7][6].owner = 'team4';
 
-    const container = document.getElementById('root');
-    const root = ReactDOM.createRoot(container);
-    root.render(<StarArenaApp />);
-  </script>
+            mapData[1][5].hasChest = true; mapData[1][6].hasChest = true; mapData[6][8].hasChest = true; mapData[7][4].hasChest = true; mapData[7][7].hasChest = true;
+            mapData[0][5].hasBoss = true; mapData[4][2].hasBoss = true; mapData[4][6].hasBoss = true;
+            mapData[1][3].hasMystery = true; mapData[3][7].hasMystery = true;
+            updateTerritoriesCount();
+        }
+
+        function getTeam(teamId) { return teams.find(t => t.id === teamId); }
+
+        function updateTerritoriesCount() {
+            teams.forEach(t => t.territories = 0);
+            mapData.forEach(row => row.forEach(hex => { if(hex.owner) { let t = getTeam(hex.owner); if(t) t.territories++; } }));
+            teams.forEach(t => t.progress = (t.territories / winCondition) * 100);
+        }
+
+        function getDistance(r1, c1, r2, c2) {
+            let q1 = c1 - Math.floor(r1/2); let q2 = c2 - Math.floor(r2/2);
+            return (Math.abs(q1 - q2) + Math.abs(q1 + r1 - q2 - r2) + Math.abs(r1 - r2)) / 2;
+        }
+
+        function autoSpawnEntities() {
+            checkAndRepairData();
+            let chestCount = 0, bossCount = 0, mysteryCount = 0;
+            mapData.forEach(row => row.forEach(hex => { if(hex.hasChest) chestCount++; if(hex.hasBoss) bossCount++; if(hex.hasMystery) mysteryCount++; }));
+
+            let chestsToSpawn = Math.max(0, 5 - chestCount); let bossesToSpawn = Math.max(0, 3 - bossCount); let mysteriesToSpawn = Math.max(0, 2 - mysteryCount);
+            if (chestsToSpawn === 0 && bossesToSpawn === 0 && mysteriesToSpawn === 0) return;
+
+            let emptyHexes = [];
+            for(let r=0; r<mapRows; r++) for(let c=0; c<mapCols; c++) if(!mapData[r][c].owner && !mapData[r][c].hasChest && !mapData[r][c].hasBoss && !mapData[r][c].hasMystery) emptyHexes.push({r, c});
+
+            for(let i=0; i<bossesToSpawn; i++) {
+                if(emptyHexes.length === 0) break;
+                let bossHexes = []; for(let r=0; r<mapRows; r++) for(let c=0; c<mapCols; c++) if(mapData[r][c].hasBoss) bossHexes.push({r, c});
+                let pickedIdx = 0;
+                if(bossHexes.length > 0) {
+                    let maxMinDist = -1; let bestCandidates = [];
+                    emptyHexes.forEach((eh, idx) => {
+                        let minDist = Math.min(...bossHexes.map(bh => getDistance(eh.r, eh.c, bh.r, bh.c)));
+                        if(minDist > maxMinDist) { maxMinDist = minDist; bestCandidates = [idx]; } else if (minDist === maxMinDist) bestCandidates.push(idx);
+                    });
+                    pickedIdx = bestCandidates[Math.floor(Math.random() * bestCandidates.length)];
+                } else pickedIdx = Math.floor(Math.random() * emptyHexes.length);
+                let picked = emptyHexes.splice(pickedIdx, 1)[0]; mapData[picked.r][picked.c].hasBoss = true;
+            }
+
+            let sortedTeamsByPower = [...teams].sort((a,b) => (a.territories*10 + a.moves) - (b.territories*10 + b.moves));
+            let weakestTeam = sortedTeamsByPower[0]; let targetHexes = [];
+            for(let r=0; r<mapRows; r++) for(let c=0; c<mapCols; c++) if(mapData[r][c].owner === weakestTeam.id) targetHexes.push({r,c});
+
+            for(let i=0; i<chestsToSpawn; i++) {
+                if(emptyHexes.length === 0) break;
+                let isProtectWeak = Math.random() < 0.6; 
+                emptyHexes.forEach(eh => {
+                    let minDistToWeak = 999;
+                    if(targetHexes.length > 0) minDistToWeak = Math.min(...targetHexes.map(th => getDistance(eh.r, eh.c, th.r, th.c)));
+                    let existingChests = [];
+                    for(let r=0; r<mapRows; r++) for(let c=0; c<mapCols; c++) if(mapData[r][c].hasChest) existingChests.push({r,c});
+                    let distToOtherChests = 999;
+                    if(existingChests.length > 0) distToOtherChests = Math.min(...existingChests.map(ec => getDistance(eh.r, eh.c, ec.r, ec.c)));
+
+                    if (isProtectWeak && targetHexes.length > 0) eh.score = minDistToWeak - (distToOtherChests * 0.5);
+                    else eh.score = -distToOtherChests + (Math.random() * 5);
+                });
+                emptyHexes.sort((a,b) => a.score - b.score);
+                let poolSize = Math.min(3, emptyHexes.length); let pickedIdx = Math.floor(Math.random() * poolSize);
+                let picked = emptyHexes.splice(pickedIdx, 1)[0]; mapData[picked.r][picked.c].hasChest = true;
+            }
+
+            for(let i=0; i<mysteriesToSpawn; i++) {
+                if(emptyHexes.length === 0) break;
+                let pickedIdx = Math.floor(Math.random() * emptyHexes.length);
+                let picked = emptyHexes.splice(pickedIdx, 1)[0]; mapData[picked.r][picked.c].hasMystery = true;
+            }
+        }
+
+        function generateRandomChests(count) { saveHistory(); playSound('click'); forceSpawn('hasChest', count, "📦 寶箱空投", "額外神秘寶箱！佔領獲得增益！"); }
+        window.generateRandomChests = generateRandomChests;
+        
+        function generateRandomBosses(count) { saveHistory(); playSound('click'); forceSpawn('hasBoss', count, "⚠️ 魔王降臨", "危險！額外魔王出現在地圖上。"); }
+        window.generateRandomBosses = generateRandomBosses;
+        
+        function generateRandomMysteries(count) { saveHistory(); playSound('click'); forceSpawn('hasMystery', count, "🌀 神秘事件降臨", "額外神秘事件！去探索吧！"); }
+        window.generateRandomMysteries = generateRandomMysteries;
+
+        function forceSpawn(type, count, title, desc) {
+            checkAndRepairData();
+            let emptyHexes = []; let spawned = 0;
+            for(let r=0; r<mapRows; r++) for(let c=0; c<mapCols; c++) if(!mapData[r][c].owner && !mapData[r][c].hasChest && !mapData[r][c].hasBoss && !mapData[r][c].hasMystery) emptyHexes.push({r,c});
+            for(let i=0; i<count; i++){
+                if(emptyHexes.length === 0) break;
+                let hex = emptyHexes.splice(Math.floor(Math.random() * emptyHexes.length), 1)[0]; mapData[hex.r][hex.c][type] = true; spawned++;
+            }
+            if(spawned>0) { addLog(`導師投放了 ${spawned} 個${title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '')}`); triggerEventModal(title, `戰場上額外出現了 ${spawned} 個${desc}`); renderMap(); saveGame(); }
+        }
+
+        function renderMap() {
+            const container = document.getElementById('hex-map'); 
+            if(!container) return; 
+            container.innerHTML = '';
+            checkAndRepairData(); 
+            
+            for (let r = 0; r < mapRows; r++) {
+                const rowDiv = document.createElement('div'); rowDiv.className = `hex-row ${r % 2 !== 0 ? 'odd-row' : ''}`;
+                for (let c = 0; c < mapCols; c++) {
+                    const hexData = mapData[r][c]; const hexDiv = document.createElement('div');
+                    hexDiv.className = 'hex'; hexDiv.id = `hex-${r}-${c}`; hexDiv.onclick = () => handleHexClick(r, c);
+                    let innerHtml = '';
+                    if (hexData.owner) {
+                        const team = getTeam(hexData.owner); hexDiv.style.backgroundColor = team.hexBg;
+                        innerHtml = `<i class="fa-solid ${team.icon} text-white opacity-80 drop-shadow-md"></i>`;
+                    } else if (hexData.hasChest) innerHtml = `<i class="fa-solid fa-gem text-yellow-300 floating-icon text-xl"></i>`;
+                    else if (hexData.hasBoss) innerHtml = `<i class="fa-solid fa-skull text-purple-400 floating-icon text-2xl"></i>`;
+                    else if (hexData.hasMystery) innerHtml = `<i class="fa-solid fa-circle-question text-blue-400 floating-icon text-2xl"></i>`;
+
+                    hexDiv.innerHTML = `<div class="hex-inner">${innerHtml}</div>`; rowDiv.appendChild(hexDiv);
+                }
+                container.appendChild(rowDiv);
+            }
+            updateValidTargets();
+        }
+
+        function renderTeamSelectors() {
+            const container = document.getElementById('team-selectors'); container.innerHTML = '';
+            teams.forEach(team => {
+                const isSelected = selectedTeamId === team.id;
+                const borderClass = isSelected ? `border-${team.color.split('-')[1]}-500 shadow-[0_0_15px_${team.hexBg}]` : 'border-gray-600';
+                const bgClass = isSelected ? 'bg-gray-700' : 'bg-gray-800';
+                
+                let modBadge = '';
+                if (team.nextPeriodModifier > 0) modBadge = `<span class="text-green-400">事件 +${team.nextPeriodModifier}分</span>`;
+                else if (team.nextPeriodModifier < 0) modBadge = `<span class="text-red-400">事件 ${team.nextPeriodModifier}分</span>`;
+                
+                let warningBadge = team.territories === 1 ? `<span class="ml-2 text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full animate-pulse border border-red-400 shadow-[0_0_8px_rgba(220,38,38,0.8)]"><i class="fa-solid fa-fire mr-1"></i>背水一戰</span>` : '';
+                
+                container.innerHTML += `
+                    <div onclick="selectTeam('${team.id}')" class="cursor-pointer ${bgClass} border-2 ${borderClass} rounded-xl p-3 flex justify-between items-center transition-all hover:bg-gray-700 relative overflow-hidden group">
+                        <div class="flex items-center z-10">
+                            <div class="w-8 h-8 rounded-full flex items-center justify-center text-white shadow-md min-w-[2rem]" style="background-color: ${team.hexBg}">
+                                <i class="fa-solid ${team.icon}"></i>
+                            </div>
+                            <div class="ml-3 flex flex-col">
+                                <span class="font-bold text-white flex items-center">${team.name} ${warningBadge}</span>
+                                <span class="text-[10px] text-gray-400">${modBadge}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 z-10">
+                            <button onclick="event.stopPropagation(); adjustAP('${team.id}', -1)" class="w-7 h-7 rounded-full bg-gray-600 hover:bg-red-500 text-white flex items-center justify-center font-black text-lg transition opacity-0 group-hover:opacity-100 shadow-md">-</button>
+                            <div class="text-center min-w-[1.5rem] mx-1">
+                                <span class="block text-[10px] text-gray-400 leading-none mb-1">行動力</span>
+                                <span class="block text-2xl font-black leading-none ${team.moves > 0 ? 'text-yellow-400 drop-shadow-md' : 'text-gray-500'}">${team.moves}</span>
+                            </div>
+                            <button onclick="event.stopPropagation(); adjustAP('${team.id}', 1)" class="w-7 h-7 rounded-full bg-gray-600 hover:bg-green-500 text-white flex items-center justify-center font-black text-lg transition opacity-0 group-hover:opacity-100 shadow-md">+</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function selectTeam(teamId) { playSound('click'); selectedTeamId = teamId; renderTeamSelectors(); updateValidTargets(); }
+        window.selectTeam = selectTeam;
+
+        function getNeighbors(r, c) {
+            const isOddRow = r % 2 !== 0; const dirs = isOddRow ? [[0, -1], [0, 1], [-1, 0], [-1, 1], [1, 0], [1, 1]] : [[0, -1], [0, 1], [-1, -1], [-1, 0], [1, -1], [1, 0]];
+            return dirs.map(([dr, dc]) => [r + dr, c + dc]).filter(([nr, nc]) => nr >= 0 && nr < mapRows && nc >= 0 && nc < mapCols);
+        }
+
+        function updateValidTargets() {
+            document.querySelectorAll('.hex').forEach(el => el.classList.remove('valid-target'));
+            if (isManualDeployMode) {
+                for (let r = 0; r < mapRows; r++) for (let c = 0; c < mapCols; c++) if (!mapData[r][c].owner) document.getElementById(`hex-${r}-${c}`).classList.add('valid-target');
+                return;
+            }
+            if (!selectedTeamId || getTeam(selectedTeamId).moves <= 0) return;
+            
+            const team = getTeam(selectedTeamId);
+            
+            // 滅國重生機制
+            if (team.territories === 0) {
+                for (let r = 0; r < mapRows; r++) {
+                    for (let c = 0; c < mapCols; c++) {
+                        if (mapData[r][c].owner === null) {
+                            document.getElementById(`hex-${r}-${c}`).classList.add('valid-target');
+                        }
+                    }
+                }
+            } else {
+                for (let r = 0; r < mapRows; r++) {
+                    for (let c = 0; c < mapCols; c++) {
+                        if (mapData[r][c].owner === selectedTeamId) {
+                            getNeighbors(r, c).forEach(([nr, nc]) => { 
+                                if (mapData[nr][nc].owner !== selectedTeamId) {
+                                    let isAllied = currentAlliance.includes(selectedTeamId) && currentAlliance.includes(mapData[nr][nc].owner);
+                                    if (!isAllied) document.getElementById(`hex-${nr}-${nc}`).classList.add('valid-target'); 
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        function startManualDeploy() {
+            playSound('click'); triggerEventModal("⚠️ 自訂初始領地", "這將會清空當前地圖與所有領地分佈！\n接下來請依序點擊地圖上的空白格，為 5 個陣營安排全新的起始位置。", () => {
+                saveHistory(); mapData = [];
+                for (let r = 0; r < mapRows; r++) { let row = []; for (let c = 0; c < mapCols; c++) row.push({ owner: null, hasChest: false, hasBoss: false, hasMystery: false }); mapData.push(row); }
+                teams.forEach(t => t.territories = 0);
+                isManualDeployMode = true; deployingTeamIndex = 0; currentAlliance = []; 
+                addLog("導師啟動了自訂初始領地");
+                renderMap(); showDeployHint();
+            }, true);
+        }
+        window.startManualDeploy = startManualDeploy;
+
+        function showDeployHint() {
+            if (!isManualDeployMode) return;
+            const currentTeam = teams[deployingTeamIndex]; const progressTitle = document.getElementById('progress-title');
+            if(progressTitle) progressTitle.innerHTML = `<span class="${currentTeam.color} animate-pulse text-lg"><i class="fa-solid fa-crosshairs mr-2"></i>請點擊地圖，選擇【${currentTeam.name}】的起始位置</span>`;
+        }
+
+        function checkVictory() {
+            let winners = teams.filter(t => t.territories >= winCondition);
+            if (winners.length > 0) {
+                playSound('victory'); let winnerNames = winners.map(t => t.name).join(' 與 ');
+                triggerEventModal("🏆 戰爭結束！", `${winnerNames} 達到了 ${winCondition} 塊領地，稱霸天下！\n請前往【最高榮譽】查看賽季結果與專屬成就！`, () => { switchTab('honor'); });
+                return true;
+            }
+            return false;
+        }
+
+        function finalizeHexAction(team) {
+            updateTerritoriesCount(); autoSpawnEntities(); renderMap(); renderTeamSelectors(); updateTerritoryProgress(); saveGame(); checkVictory();
+        }
+
+        function showMysteryChoice(team) {
+            pendingMysteryTeam = team;
+            document.getElementById('mystery-choice-overlay').classList.remove('hidden');
+        }
+        window.showMysteryChoice = showMysteryChoice;
+        
+        function makeMysteryChoice(choice) {
+            playSound('click'); document.getElementById('mystery-choice-overlay').classList.add('hidden');
+            if(!pendingMysteryTeam) return; const team = pendingMysteryTeam; pendingMysteryTeam = null;
+
+            if (Math.random() < 0.5) {
+                addLog(`${team.name} 選擇了${choice === 'red' ? '赤炎' : '蒼冰'}法陣，觸發領土擴張！`);
+                teams.forEach(t => {
+                    let emptyNeighbors = [];
+                    for(let rr=0; rr<mapRows; rr++) for(let cc=0; cc<mapCols; cc++) if(mapData[rr][cc].owner === null && !mapData[rr][cc].hasChest && !mapData[rr][cc].hasBoss && !mapData[rr][cc].hasMystery) {
+                        if (getNeighbors(rr, cc).some(([nr, nc]) => mapData[nr][nc].owner === t.id)) emptyNeighbors.push({r:rr, c:cc});
+                    }
+                    if (emptyNeighbors.length > 0) { let picked = emptyNeighbors[Math.floor(Math.random() * emptyNeighbors.length)]; mapData[picked.r][picked.c].owner = t.id; }
+                });
+                triggerEventModal(`🌀 神秘事件：領土擴張！`, `強大的能量引發地殼變動，所有陣營同時幸運擴展了 1 格相鄰領地！`);
+            } else {
+                addLog(`${team.name} 選擇了${choice === 'red' ? '赤炎' : '蒼冰'}法陣，觸發天災降臨！`);
+                teams.forEach(t => {
+                    let teamHexes = [];
+                    for(let rr=0; rr<mapRows; rr++) for(let cc=0; cc<mapCols; cc++) if(mapData[rr][cc].owner === t.id) teamHexes.push({r:rr, c:cc});
+                    if (teamHexes.length > 1) { let picked = teamHexes[Math.floor(Math.random() * teamHexes.length)]; mapData[picked.r][picked.c].owner = null; }
+                });
+                triggerEventModal(`🌀 神秘事件：天災降臨！`, `未知的能量引發大地震顫，所有陣營受到衝擊，各流失了 1 格隨機領地！`);
+            }
+            finalizeHexAction(team);
+        }
+        window.makeMysteryChoice = makeMysteryChoice;
+
+        function handleHexClick(r, c) {
+            const hexEl = document.getElementById(`hex-${r}-${c}`);
+            if (!hexEl.classList.contains('valid-target')) return;
+
+            if (isManualDeployMode) {
+                playSound('occupy'); const team = teams[deployingTeamIndex]; mapData[r][c].owner = team.id; deployingTeamIndex++;
+                if (deployingTeamIndex >= teams.length) {
+                    isManualDeployMode = false; finalizeHexAction();
+                    const progressTitle = document.getElementById('progress-title');
+                    if(progressTitle) progressTitle.innerHTML = `<i class="fa-solid fa-flag-checkered text-lg"></i> 爭霸進度 (率先 15 格者獲勝)`;
+                    triggerEventModal("✅ 佈署完成", "五個陣營的初始領地已設定完畢，戰爭開始！");
+                } else { renderMap(); showDeployHint(); }
+                return;
+            }
+
+            if (!selectedTeamId) return;
+            const team = getTeam(selectedTeamId); if (team.moves <= 0) return;
+
+            saveHistory(); team.moves -= 1; const targetData = mapData[r][c]; targetData.owner = selectedTeamId;
+            playSound('occupy'); addLog(`${team.name} 佔領了新領地`);
+
+            const effect = document.createElement('div'); effect.className = 'hex-capture-effect'; hexEl.appendChild(effect);
+            setTimeout(() => { if(effect.parentNode) effect.remove(); }, 600);
+
+            if (targetData.hasChest) {
+                targetData.hasChest = false; playSound('chest'); team.chestsOpened = (team.chestsOpened || 0) + 1; 
+                let isMoves = Math.random() < 0.5;
+                if (isMoves) {
+                    let gain = Math.floor(Math.random() * 2) + 1; team.moves += gain;
+                    addLog(`${team.name} 開啟寶箱，行動力+${gain}`);
+                    triggerEventModal(`🎁 ${team.name} 打開寶箱！`, `恭喜獲得前線補給，行動力 +${gain}！`);
+                } else {
+                    let gain = Math.floor(Math.random() * 10) + 1; team.nextPeriodModifier += gain;
+                    addLog(`${team.name} 開啟寶箱，事件預存+${gain}`);
+                    triggerEventModal(`🎁 ${team.name} 打開寶箱！`, `發現古代軍資，下期結算積分預存 +${gain}！`);
+                }
+                finalizeHexAction(team);
+            } else if (targetData.hasBoss) {
+                targetData.hasBoss = false; playSound('boss'); team.bossKills = (team.bossKills || 0) + 1; 
+                let cost = Math.floor(Math.random() * 10) + 1; team.nextPeriodModifier -= cost;
+                let rewardType = Math.random() < 0.5 ? 'moves' : 'score'; let gainStr = '';
+                if (rewardType === 'moves') {
+                    let gain = Math.floor(Math.random() * 3) + 1; team.moves += gain; gainStr = `行動力 +${gain}`;
+                    addLog(`${team.name} 擊退魔王，代價-${cost}，${gainStr}`);
+                } else {
+                    let gain = Math.floor(Math.random() * 10) + 1; team.nextPeriodModifier += gain; gainStr = `下期積分 +${gain}`;
+                    addLog(`${team.name} 擊退魔王，代價-${cost}，${gainStr}`);
+                }
+                triggerEventModal(`💀 魔王討伐成功！`, `【${team.name}】付出了 ${cost} 分的代價，順利擊敗魔王並奪取戰利品：\n${gainStr}！`);
+                finalizeHexAction(team);
+            } else if (targetData.hasMystery) {
+                targetData.hasMystery = false; playSound('mystery');
+                showMysteryChoice(team); 
+            } else {
+                finalizeHexAction(team);
+            }
+        }
+        window.handleHexClick = handleHexClick;
+
+        // === 爭霸進度條優化 ===
+        function updateTerritoryProgress() {
+            const container = document.getElementById('progress-container'); container.innerHTML = '';
+            let sortedTeams = [...teams].sort((a,b) => b.territories - a.territories);
+
+            sortedTeams.forEach((team, idx) => {
+                const percent = Math.min(100, (team.territories / winCondition) * 100);
+                const isClose = team.territories >= winCondition - 3;
+                const glowClass = isClose ? 'shadow-[0_0_15px_rgba(255,255,255,0.8)] animate-pulse' : 'shadow-inner';
+                const textGlow = isClose ? 'text-yellow-300 drop-shadow-[0_0_5px_rgba(250,204,21,0.8)] animate-pulse' : 'text-gray-300';
+                const rankCrown = idx === 0 && team.territories > 1 ? `<i class="fa-solid fa-crown text-yellow-400 absolute -left-4 -top-2 drop-shadow-md"></i>` : '';
+                const topGlow = idx === 0 && team.territories > 1 ? `border-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.2)]` : `border-gray-700/50`;
+
+                container.innerHTML += `
+                    <div class="flex items-center w-full bg-gray-800/60 p-1.5 rounded-xl border ${topGlow} relative transition-all">
+                        ${rankCrown}
+                        <div class="w-16 flex items-center justify-end pr-3 ${team.color} font-bold text-sm z-10">
+                            <i class="fa-solid ${team.icon} mr-1"></i>${team.name}
+                        </div>
+                        <div class="flex-grow bg-gray-900 rounded-full h-5 relative border border-gray-700 overflow-hidden shadow-inner">
+                            <div class="h-full rounded-full bar-transition racing-stripe ${glowClass}" style="width: ${percent}%; background-color: ${team.hexBg};"></div>
+                            <div class="absolute top-0 bottom-0 left-[33%] border-l border-white/10"></div>
+                            <div class="absolute top-0 bottom-0 left-[66%] border-l border-white/10"></div>
+                        </div>
+                        <div class="w-12 text-right font-black ${textGlow} text-sm pl-2 pr-1 z-10">
+                            ${team.territories}/${winCondition}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function triggerEventModal(title, desc, confirmCallback = null, isConfirmBox = false) {
+            document.getElementById('event-title').innerText = title; document.getElementById('event-desc').innerText = desc;
+            const modal = document.getElementById('event-modal'); const overlay = document.getElementById('modal-overlay');
+            modal.classList.remove('modal-jelly'); void modal.offsetWidth; modal.classList.add('modal-jelly');
+            
+            const icon = document.getElementById('event-icon');
+            if (title.includes("寶箱")) icon.className = "fa-solid fa-gem text-7xl mb-6 text-yellow-300";
+            else if (title.includes("討伐") || title.includes("魔王")) icon.className = "fa-solid fa-skull text-7xl mb-6 text-purple-400";
+            else if (title.includes("警告") || title.includes("結算") || title.includes("重置") || title.includes("佈署")) icon.className = "fa-solid fa-triangle-exclamation text-7xl mb-6 text-red-500";
+            else if (title.includes("神秘") || title.includes("事件") || title.includes("命運") || title.includes("結盟") || title.includes("擴張")) icon.className = "fa-solid fa-bolt text-7xl mb-6 text-blue-400";
+            else icon.className = "fa-solid fa-bell text-7xl mb-6 text-gray-300";
+
+            if (isConfirmBox) document.getElementById('event-cancel-btn').classList.remove('hidden');
+            else document.getElementById('event-cancel-btn').classList.add('hidden');
+
+            activeModalCallback = confirmCallback; overlay.classList.remove('hidden');
+        }
+        window.triggerEventModal = triggerEventModal;
+
+        function closeModal() { playSound('click'); document.getElementById('modal-overlay').classList.add('hidden'); if (event.target.id === 'event-btn' && activeModalCallback) activeModalCallback(); activeModalCallback = null; }
+        window.closeModal = closeModal;
+
+        function updateHonorView() {
+            const honorRanking = document.getElementById('honor-ranking');
+            let sortedTeams = [...teams].sort((a, b) => b.territories - a.territories);
+            let winners = teams.filter(t => t.territories >= winCondition);
+            if (winners.length === 0) winners = [sortedTeams[0]]; 
+            
+            let scoreReward = Math.floor(100 / winners.length); let pullReward = Math.max(1, Math.floor(10 / winners.length));
+            const titleEl = document.getElementById('honor-title'); const nameEl = document.getElementById('honor-team-name'); const crownEl = document.getElementById('honor-crown');
+
+            if (winners[0] && winners[0].territories > 1) { 
+                if (winners.length > 1) titleEl.innerText = "賽季並列總冠軍"; else titleEl.innerText = "賽季總冠軍";
+                nameEl.innerText = winners.map(w => w.name).join(' & ');
+                nameEl.className = `text-4xl md:text-6xl font-black mb-8 z-10 drop-shadow-2xl tracking-widest ${winners[0].color} leading-tight`;
+                crownEl.className = `fa-solid fa-crown text-8xl mb-6 drop-shadow-[0_0_20px_rgba(250,204,21,0.8)] z-10 ${winners[0].color}`;
+                document.getElementById('reward-score-text').innerHTML = `奪冠獎勵：本期總積分狂飆 <span class="text-white bg-gradient-to-r from-red-600 to-red-500 px-4 py-1 rounded-xl shadow-lg border border-red-400">+${scoreReward} 分</span>`;
+                document.getElementById('reward-pull-text').innerHTML = `終極大獎：每人獲得小組抽卡 <span class="text-white bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-1 rounded-xl shadow-lg border border-blue-400">${pullReward} 次</span>`;
+            }
+
+            let bestAdventurer = [...teams].sort((a,b) => (b.chestsOpened||0) - (a.chestsOpened||0))[0];
+            let bestImprover = [...teams].sort((a,b) => (b.totalMovesGained||0) - (a.totalMovesGained||0))[0];
+            let bestSlayer = [...teams].sort((a,b) => (b.bossKills||0) - (a.bossKills||0))[0];
+
+            let achHtml = '';
+            achHtml += `<div class="bg-gray-800/90 border-2 border-blue-400 p-4 rounded-xl shadow-lg relative overflow-hidden"><h4 class="text-blue-300 font-bold mb-2 tracking-wide"><i class="fa-solid fa-compass mr-2"></i>冒險家</h4><div class="text-xl font-black text-white ${bestAdventurer.chestsOpened > 0 ? bestAdventurer.color : 'text-gray-500'}">${bestAdventurer.chestsOpened > 0 ? bestAdventurer.name : '無人達成'} <span class="text-sm font-normal text-gray-400">(${bestAdventurer.chestsOpened||0} 箱)</span></div></div>`;
+            achHtml += `<div class="bg-gray-800/90 border-2 border-yellow-400 p-4 rounded-xl shadow-lg relative overflow-hidden"><h4 class="text-yellow-300 font-bold mb-2 tracking-wide"><i class="fa-solid fa-shoe-prints mr-2"></i>最佳進步獎</h4><div class="text-xl font-black text-white ${bestImprover.totalMovesGained > 0 ? bestImprover.color : 'text-gray-500'}">${bestImprover.totalMovesGained > 0 ? bestImprover.name : '無人達成'} <span class="text-sm font-normal text-gray-400">(累計 +${bestImprover.totalMovesGained||0} 步)</span></div></div>`;
+            achHtml += `<div class="bg-gray-800/90 border-2 border-red-400 p-4 rounded-xl shadow-lg relative overflow-hidden"><h4 class="text-red-300 font-bold mb-2 tracking-wide"><i class="fa-solid fa-dragon mr-2"></i>屠龍勇士</h4><div class="text-xl font-black text-white ${bestSlayer.bossKills > 0 ? bestSlayer.color : 'text-gray-500'}">${bestSlayer.bossKills > 0 ? bestSlayer.name : '無人達成'} <span class="text-sm font-normal text-gray-400">(${bestSlayer.bossKills||0} 隻)</span></div></div>`;
+            document.getElementById('honor-achievements').innerHTML = achHtml;
+
+            honorRanking.innerHTML = '';
+            sortedTeams.forEach((t, idx) => {
+                let badge = ''; if(idx === 0) badge = '🏆 冠軍'; else if(idx === 1) badge = '🥈 亞軍'; else if(idx === 2) badge = '🥉 季軍';
+                honorRanking.innerHTML += `
+                    <div class="bg-gray-800 border-l-4 rounded-xl p-4 flex justify-between items-center" style="border-color: ${t.hexBg};">
+                        <div class="flex items-center">
+                            <span class="w-8 text-xl font-bold text-gray-500 mr-2">${idx+1}.</span>
+                            <i class="fa-solid ${t.icon} ${t.color} text-xl mr-3 w-6 text-center"></i>
+                            <span class="text-white font-bold text-lg">${t.name}</span>
+                            <span class="ml-3 text-sm text-yellow-400 font-bold">${badge}</span>
+                        </div>
+                        <span class="text-gray-300 font-black">領地: <span class="text-2xl ml-1">${t.territories}</span></span>
+                    </div>
+                `;
+            });
+        }
+
+        function resetSeason() {
+            playSound('click'); triggerEventModal("⚠️ 重置天下", "這將會清空地圖、行動力與領地資料，並將陣營名稱恢復預設。確定嗎？", () => {
+                saveHistory(); initMapData();
+                teams.forEach(t => { 
+                    t.name = defaultTeamNames[t.id]; // 恢復預設名稱
+                    t.icon = defaultTeamIcons[t.id]; // 恢復預設圖示
+                    t.moves = 0; t.nextPeriodModifier = 0; t.tempInput = ''; t.lastDiff = 0; t.lastScore = 0; 
+                    t.bossKills = 0; t.totalMovesGained = 0; t.chestsOpened = 0;
+                });
+                selectedTeamId = null; calcCount = 0; currentAlliance = [];
+                saveGame(); switchTab('map'); document.getElementById('calc-count-display').innerText = `結算次數：0`;
+                addLog("導師 重置了天下");
+                triggerEventModal("🌍 賽季重置完成", "全新的天下已準備好，請各路英雄重新出發！");
+            }, true);
+        }
+        window.resetSeason = resetSeason;
+
+        function exportGameData() {
+            playSound('click'); 
+            
+            // 確保匯出前強制將畫面的輸入值同步到記憶體中，保證資料完整性
+            teams.forEach(team => { 
+                const currEl = document.getElementById(`curr-${team.id}`); if (currEl) team.tempInput = currEl.value; 
+                const lastEl = document.getElementById(`last-${team.id}`); if (lastEl) team.lastScore = parseFloat(lastEl.value) || 0;
+            });
+
+            const gameData = { teams, mapData, selectedTeamId, calcCount, currentAlliance };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(gameData, null, 2));
+            const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "領土爭霸戰_進度_" + new Date().toISOString().slice(0, 10) + ".json");
+            document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove();
+            triggerEventModal("✅ 匯出成功", "全部遊戲進度(含上期戰力與各項成就)已成功下載為 JSON 檔案。");
+        }
+        window.exportGameData = exportGameData;
+
+        function importGameData(event) {
+            const file = event.target.files[0]; if (!file) return; const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (importedData.teams && importedData.mapData) {
+                        saveHistory(); teams = importedData.teams; mapData = typeof importedData.mapData === 'string' ? JSON.parse(importedData.mapData) : importedData.mapData;
+                        selectedTeamId = importedData.selectedTeamId || null; calcCount = importedData.calcCount || 0; currentAlliance = importedData.currentAlliance || [];
+                        saveGame(); updateUIFromState(); playSound('victory'); triggerEventModal("✅ 匯入成功", "遊戲進度已成功載入並同步！");
+                        addLog("成功匯入遊戲進度");
+                    } else triggerEventModal("❌ 匯入失敗", "檔案格式不正確。");
+                } catch (err) { triggerEventModal("❌ 匯入失敗", "無法解析檔案，檔案可能已損毀。"); }
+                event.target.value = ''; 
+            };
+            reader.readAsText(file);
+        }
+        window.importGameData = importGameData;
+
+    </script>
 </body>
 </html>
